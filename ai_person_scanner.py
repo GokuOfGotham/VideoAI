@@ -66,7 +66,7 @@ def get_pure_aircraft_segments(video_path: str, confidence_threshold: float = 0.
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     out_file = os.path.join(OUTPUT_DIR, "yolo_clean_segments.txt")
-    with open(out_file, "w") as f:
+    with open(out_file, "w", encoding="utf-8") as f:
         f.write(str(clean_segments))
     print(f"[+] Saved clean segments to: {out_file}")
     return clean_segments

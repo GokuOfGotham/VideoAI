@@ -4,9 +4,17 @@ import random
 import requests
 import re
 import subprocess
+import sys
 import time
 from pathlib import Path
 from dotenv import load_dotenv
+
+# See main.py: Windows pipes default to cp1252, which mangles curly quotes and
+# ellipses in generated script text. Affects logs only, but garbled logs hide
+# real problems.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 # Load environment variables
 load_dotenv()

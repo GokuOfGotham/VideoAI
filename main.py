@@ -1,5 +1,6 @@
 import requests
 import subprocess
+import sys
 import time
 import os
 import json
@@ -9,6 +10,16 @@ import re
 import random
 from pathlib import Path
 from dotenv import load_dotenv
+
+# On Windows, stdout defaults to the locale codepage (cp1252) whenever output
+# is piped or redirected. Generated scripts contain curly quotes and ellipses,
+# which that codepage cannot represent - they arrive as replacement characters
+# in logs. Only the console output is affected (subtitles come from Whisper and
+# the .ass file is written as UTF-8 explicitly), but garbled logs make real
+# problems harder to spot.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 # Load environment variables
 load_dotenv()
