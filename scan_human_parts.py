@@ -2,9 +2,15 @@ import cv2
 import glob
 import os
 import numpy as np
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
+
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", str(Path(__file__).resolve().parent / "output"))
 
 def analyze_all_seconds():
-    files = sorted(glob.glob(os.path.join(os.getenv("OUTPUT_DIR", "output"), "b2_sec_frames\sec_*.jpg")))
+    files = sorted(glob.glob(os.path.join(OUTPUT_DIR, "b2_sec_frames", "sec_*.jpg")))
     
     clean_seconds = []
     human_seconds = []

@@ -1,5 +1,12 @@
 import cv2
 import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
+
+MEDIA_ROOT = os.getenv("MEDIA_ROOT", str(Path(__file__).resolve().parent / "media"))
+MILITARY_VIDEOS_DIR = os.getenv("MILITARY_VIDEOS_DIR", os.path.join(MEDIA_ROOT, "US Military"))
 
 def check_video(video_path):
     cap = cv2.VideoCapture(video_path)
@@ -42,4 +49,4 @@ def check_video(video_path):
     return face_intervals
 
 if __name__ == "__main__":
-    check_video(os.path.join(os.getenv("MILITARY_VIDEOS_DIR", os.path.join(os.getenv("MEDIA_ROOT", "media"), "US Military")), "DOD_111608478.mp4"))
+    check_video(os.path.join(MILITARY_VIDEOS_DIR, "DOD_111608478.mp4"))

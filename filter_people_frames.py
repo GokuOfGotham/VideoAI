@@ -1,9 +1,16 @@
 import cv2
 import glob
+import os
 import numpy as np
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
+
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", str(Path(__file__).resolve().parent / "output"))
 
 def scan_frames():
-    files = sorted(glob.glob(os.path.join(os.getenv("OUTPUT_DIR", "output"), "b2_frame_*.jpg")))
+    files = sorted(glob.glob(os.path.join(OUTPUT_DIR, "b2_frame_*.jpg")))
     print(f"Scanned {len(files)} frame thumbnails:")
     
     for f in files:
