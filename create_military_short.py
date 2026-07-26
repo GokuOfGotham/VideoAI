@@ -15,10 +15,13 @@ EPIDEMIC_SOUND_API_KEY = os.getenv('EPIDEMIC_SOUND_API_KEY')
 FFMPEG_PATH = 'ffmpeg'
 FFPROBE_PATH = 'ffprobe'
 
-# Directories
-MILITARY_VIDEOS_DIR = r"<MILITARY_VIDEOS_DIR>"
-EPIDEMIC_MUSIC_DIR = r"<EPIDEMIC_MUSIC_DIR>"
-OUTPUT_DIR = r"<OUTPUT_DIR>"
+# Directories. Override in .env — see .env.example.
+PROJECT_ROOT = Path(__file__).resolve().parent
+MEDIA_ROOT = os.getenv('MEDIA_ROOT', str(PROJECT_ROOT / 'media'))
+
+MILITARY_VIDEOS_DIR = os.getenv('MILITARY_VIDEOS_DIR', os.path.join(MEDIA_ROOT, 'US Military'))
+EPIDEMIC_MUSIC_DIR = os.getenv('EPIDEMIC_MUSIC_DIR', str(PROJECT_ROOT / 'assets' / 'epidemic_sound'))
+OUTPUT_DIR = os.getenv('OUTPUT_DIR', str(PROJECT_ROOT / 'output'))
 
 os.makedirs(MILITARY_VIDEOS_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -579,7 +582,7 @@ def build_b2_action_only_short(video_file: str = None, search_term: str = None, 
     leaving 100% pure B-2 Stealth Bomber aircraft footage paired with an explosive orchestral war score.
     """
     if not video_file or not os.path.exists(video_file):
-        video_file = r"<MILITARY_VIDEOS_DIR>\DOD_111608478.mp4"
+        video_file = os.path.join(MILITARY_VIDEOS_DIR, "DOD_111608478.mp4")
         if not os.path.exists(video_file):
             raise FileNotFoundError(f"Video file not found: {video_file}")
             
@@ -669,12 +672,12 @@ def generate_6_iran_shorts(audio_mode: str = "replace"):
     using pure orchestral war soundtracks (NO techno, NO voiceover, NO text).
     """
     candidate_videos = [
-        r"<MILITARY_VIDEOS_DIR>\DOD_106590558.mp4",
-        r"<MILITARY_VIDEOS_DIR>\DOD_111558669.mp4",
-        r"<MILITARY_VIDEOS_DIR>\DOD_111615058.mp4",
-        r"<MILITARY_VIDEOS_DIR>\DOD_111615082.mp4",
-        r"<MILITARY_VIDEOS_DIR>\DOD_111615087.mp4",
-        r"<MILITARY_VIDEOS_DIR>\DOD_111835497.mp4"
+        os.path.join(MILITARY_VIDEOS_DIR, "DOD_106590558.mp4"),
+        os.path.join(MILITARY_VIDEOS_DIR, "DOD_111558669.mp4"),
+        os.path.join(MILITARY_VIDEOS_DIR, "DOD_111615058.mp4"),
+        os.path.join(MILITARY_VIDEOS_DIR, "DOD_111615082.mp4"),
+        os.path.join(MILITARY_VIDEOS_DIR, "DOD_111615087.mp4"),
+        os.path.join(MILITARY_VIDEOS_DIR, "DOD_111835497.mp4")
     ]
     
     orchestral_queries = [
@@ -763,25 +766,25 @@ if __name__ == "__main__":
     import sys
     mode = sys.argv[1] if len(sys.argv) > 1 else "replace"
     if "--b2pure" in sys.argv or "--nopeople" in sys.argv:
-        build_b2_action_only_short(r"<MILITARY_VIDEOS_DIR>\DOD_111608478.mp4", audio_mode=mode)
+        build_b2_action_only_short(os.path.join(MILITARY_VIDEOS_DIR, "DOD_111608478.mp4"), audio_mode=mode)
     elif "--iran6" in sys.argv or "--6shorts" in sys.argv:
         generate_6_iran_shorts(audio_mode=mode)
     elif "--combine" in sys.argv:
         files = [
-            r"<MILITARY_VIDEOS_DIR>\DOD_111615046.mp4",
-            r"<MILITARY_VIDEOS_DIR>\DOD_111558644.mp4"
+            os.path.join(MILITARY_VIDEOS_DIR, "DOD_111615046.mp4"),
+            os.path.join(MILITARY_VIDEOS_DIR, "DOD_111558644.mp4")
         ]
         combine_military_videos(files, audio_mode=mode)
     elif "--hollywood" in sys.argv or "--scope" in sys.argv or "--speedramp" in sys.argv:
-        build_military_hollywood_edit(r"<MILITARY_VIDEOS_DIR>\DOD_111856261.mp4", audio_mode=mode, speedramp=True)
+        build_military_hollywood_edit(os.path.join(MILITARY_VIDEOS_DIR, "DOD_111856261.mp4"), audio_mode=mode, speedramp=True)
     elif "--long" in sys.argv or "--full" in sys.argv:
         is_vert = "--vertical" in sys.argv
         is_cinematic = "--raw" not in sys.argv
-        build_military_longform(r"<MILITARY_VIDEOS_DIR>\DOD_111856261.mp4", audio_mode=mode, vertical=is_vert, cinematic=is_cinematic)
+        build_military_longform(os.path.join(MILITARY_VIDEOS_DIR, "DOD_111856261.mp4"), audio_mode=mode, vertical=is_vert, cinematic=is_cinematic)
     elif "--batch" in sys.argv:
-        batch_military_shorts(r"<MILITARY_VIDEOS_DIR>\DOD_111856261.mp4", num_shorts=3, audio_mode=mode)
+        batch_military_shorts(os.path.join(MILITARY_VIDEOS_DIR, "DOD_111856261.mp4"), num_shorts=3, audio_mode=mode)
     else:
-        build_military_short(r"<MILITARY_VIDEOS_DIR>\DOD_111608478.mp4", audio_mode=mode)
+        build_military_short(os.path.join(MILITARY_VIDEOS_DIR, "DOD_111608478.mp4"), audio_mode=mode)
 
 
 

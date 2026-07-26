@@ -4,7 +4,7 @@ import os
 import numpy as np
 
 def analyze_all_seconds():
-    files = sorted(glob.glob(r"<OUTPUT_DIR>\b2_sec_frames\sec_*.jpg"))
+    files = sorted(glob.glob(os.path.join(os.getenv("OUTPUT_DIR", "output"), "b2_sec_frames\sec_*.jpg")))
     
     clean_seconds = []
     human_seconds = []

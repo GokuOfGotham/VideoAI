@@ -3,7 +3,7 @@ import glob
 import numpy as np
 
 def scan_frames():
-    files = sorted(glob.glob(r"<OUTPUT_DIR>\b2_frame_*.jpg"))
+    files = sorted(glob.glob(os.path.join(os.getenv("OUTPUT_DIR", "output"), "b2_frame_*.jpg")))
     print(f"Scanned {len(files)} frame thumbnails:")
     
     for f in files:

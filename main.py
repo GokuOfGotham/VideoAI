@@ -19,12 +19,17 @@ GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 EPIDEMIC_SOUND_API_KEY = os.getenv('EPIDEMIC_SOUND_API_KEY')
 FFMPEG_PATH = 'ffmpeg'
 
-# Directories
-LIFE_VIDEOS_DIR = r"<LIFE_VIDEOS_DIR>"
-NATURE_VIDEOS_DIR = r"<NATURE_VIDEOS_DIR>"
-BATMAN_VIDEOS_DIR = r"<GAMING_VIDEOS_DIR>"
-EPIDEMIC_MUSIC_DIR = r"<EPIDEMIC_MUSIC_DIR>"
-OUTPUT_DIR = r"<OUTPUT_DIR>"
+# Directories. MEDIA_ROOT is where your source footage lives; the per-category
+# folders can be overridden individually. Set these in .env — see .env.example.
+PROJECT_ROOT = Path(__file__).resolve().parent
+MEDIA_ROOT = os.getenv('MEDIA_ROOT', str(PROJECT_ROOT / 'media'))
+
+LIFE_VIDEOS_DIR = os.getenv('LIFE_VIDEOS_DIR', os.path.join(MEDIA_ROOT, 'Life'))
+NATURE_VIDEOS_DIR = os.getenv('NATURE_VIDEOS_DIR', os.path.join(MEDIA_ROOT, 'Nature'))
+GAMING_VIDEOS_DIR = os.getenv('GAMING_VIDEOS_DIR', os.path.join(MEDIA_ROOT, 'Gaming'))
+BATMAN_VIDEOS_DIR = GAMING_VIDEOS_DIR
+EPIDEMIC_MUSIC_DIR = os.getenv('EPIDEMIC_MUSIC_DIR', str(PROJECT_ROOT / 'assets' / 'epidemic_sound'))
+OUTPUT_DIR = os.getenv('OUTPUT_DIR', str(PROJECT_ROOT / 'output'))
 
 os.makedirs(LIFE_VIDEOS_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
