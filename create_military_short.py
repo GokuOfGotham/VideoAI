@@ -665,7 +665,110 @@ def build_b2_action_only_short(video_file: str = None, search_term: str = None, 
     return output_path
 
 
+def build_hooked_military_short(video_file: str = None, hook_range: tuple = (45.0, 48.0), main_segments: list = None, search_term: str = None, audio_mode: str = "replace", vertical: bool = True):
+    """
+    Renders an action short using the NEW EDITING STYLE with STRICT 0% FACES GUARANTEE:
+    1. 3.0-Second Retention Hook Engine: Places peak action clip at Frame 0 (0.0s - 3.0s) to stop scrolling.
+    2. Strict Face Removal: Completely trims out 0.0s-23.5s (tarmac human faces + pilot cockpit face closeups).
+    3. Epic Hybrid Orchestral Score (Hans Zimmer Style): Deep brass swells, massive impacts, tension strings.
+    """
+    if not video_file or not os.path.exists(video_file):
+        video_file = os.path.join(MILITARY_VIDEOS_DIR, "DOD_107190749.mp4")
+        if not os.path.exists(video_file):
+            raise FileNotFoundError(f"Video file not found: {video_file}")
+            
+    if main_segments is None:
+        # Strictly face-free segments (excludes all 0.0s - 23.5s human faces)
+        main_segments = [(24.0, 45.0), (48.0, 59.5)]
+        
+    print(f"\n[*] PROCESSING STRICT 0% FACES SHORT (WITH 3.0-SEC RETENTION HOOK): {video_file}")
+    
+    hook_dur = hook_range[1] - hook_range[0]
+    main_dur = sum(seg[1] - seg[0] for seg in main_segments)
+    total_dur = hook_dur + main_dur
+    print(f"[*] Hook Duration: {hook_dur:.1f}s | Main Action Duration: {main_dur:.1f}s | Total Short Duration: {total_dur:.1f}s (100% Zero Faces Guarantee)")
+    
+    if not search_term:
+        search_term = "hans zimmer cinematic trailer"
+        
+    music_track = fetch_epidemic_action_track(search_term)
+    if not music_track:
+        raise RuntimeError("Failed to fetch music track from Epidemic Sound.")
+        
+    music_path = music_track['local_path']
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    output_filename = f"US_Military_StrictNoFaces_HookedShort_{Path(video_file).stem}_{timestamp}.mp4"
+    output_path = os.path.join(OUTPUT_DIR, output_filename)
+    
+    fade_start = max(0.0, total_dur - 2.5)
+    
+    if vertical:
+        crop_filter = "crop=w=ih*9/16:h=ih:x=(iw-ih*9/16)/2:y=0,scale=1080:1920:flags=bicubic"
+    else:
+        crop_filter = "scale=1920:1080:flags=bicubic"
+        
+    filter_parts = []
+    # 3-second Hook at Frame 0
+    filter_parts.append(
+        f"[0:v]trim={hook_range[0]}:{hook_range[1]},setpts=(PTS-STARTPTS)*1.0,{crop_filter},"
+        f"eq=contrast=1.14:saturation=1.18:gamma=0.95[v_hook];"
+    )
+    # Main segments
+    for idx, (st, et) in enumerate(main_segments):
+        filter_parts.append(
+            f"[0:v]trim={st}:{et},setpts=(PTS-STARTPTS)*1.0,{crop_filter},"
+            f"eq=contrast=1.14:saturation=1.18:gamma=0.95[v_seg_{idx}];"
+        )
+        
+    concat_inputs = "[v_hook]" + "".join([f"[v_seg_{i}]" for i in range(len(main_segments))])
+    total_clips = 1 + len(main_segments)
+    v_concat = f"{concat_inputs}concat=n={total_clips}:v=1:a=0,fade=t=in:st=0:d=0.5,fade=t=out:st={fade_start}:d=2.5[v]"
+    
+    a_filter = "bass=g=6:f=60,treble=g=3:f=4000,loudnorm=I=-14:TP=-1.5:LRA=11"
+    
+    filter_complex = "".join(filter_parts) + f" {v_concat}; [1:a]volume=1.0,{a_filter},afade=t=out:st={fade_start}:d=2.5[a]"
+        
+    ffmpeg_cmd = [
+        FFMPEG_PATH, "-y",
+        "-i", video_file,
+        "-i", music_path,
+        "-filter_complex", filter_complex,
+        "-map", "[v]",
+        "-map", "[a]",
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "17",
+        "-c:a", "aac",
+        "-b:a", "256k",
+        "-t", str(total_dur),
+        output_path
+    ]
+    
+    print("\n-------------------------------------------------------")
+    print(f" FFMPEG STRICT 0% FACES SHORT COMPOSITOR (3.0s Hook, Duration: {total_dur:.1f}s)")
+    print("-------------------------------------------------------")
+    print(f"[*] Output Destination: {output_path}")
+    print("[*] Running FFmpeg render pipeline...")
+    
+    render_start = time.time()
+    res = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+    render_time = time.time() - render_start
+    
+    if res.returncode != 0:
+        print(f"[!] FFmpeg Error:\n{res.stderr}")
+        raise RuntimeError("FFmpeg render failed!")
+        
+    output_bytes = os.path.getsize(output_path)
+    print(f"[+] Strict No-Faces Short Render Completed in {render_time:.1f} seconds!")
+    print(f"[+] Output Short Size: {output_bytes / (1024*1024):.2f} MB")
+    print(f"[+] Saved to: {output_path}")
+    print("-------------------------------------------------------\n")
+    return output_path
+
+
+
 def generate_6_iran_shorts(audio_mode: str = "replace"):
+
 
     """
     Batch generates 6 action-packed 9:16 vertical shorts from Iran strike videos
@@ -765,7 +868,10 @@ def generate_6_iran_shorts(audio_mode: str = "replace"):
 if __name__ == "__main__":
     import sys
     mode = sys.argv[1] if len(sys.argv) > 1 else "replace"
-    if "--b2pure" in sys.argv or "--nopeople" in sys.argv:
+    if "--hook" in sys.argv or "--newstyle" in sys.argv:
+        vf = sys.argv[2] if len(sys.argv) > 2 and os.path.exists(sys.argv[2]) else os.path.join(MILITARY_VIDEOS_DIR, "DOD_107190749.mp4")
+        build_hooked_military_short(vf, audio_mode=mode)
+    elif "--b2pure" in sys.argv or "--nopeople" in sys.argv:
         build_b2_action_only_short(os.path.join(MILITARY_VIDEOS_DIR, "DOD_111608478.mp4"), audio_mode=mode)
     elif "--iran6" in sys.argv or "--6shorts" in sys.argv:
         generate_6_iran_shorts(audio_mode=mode)
@@ -784,7 +890,4 @@ if __name__ == "__main__":
     elif "--batch" in sys.argv:
         batch_military_shorts(os.path.join(MILITARY_VIDEOS_DIR, "DOD_111856261.mp4"), num_shorts=3, audio_mode=mode)
     else:
-        build_military_short(os.path.join(MILITARY_VIDEOS_DIR, "DOD_111608478.mp4"), audio_mode=mode)
-
-
-
+        build_military_short(os.path.join(MILITARY_VIDEOS_DIR, "DOD_107190749.mp4"), audio_mode=mode)

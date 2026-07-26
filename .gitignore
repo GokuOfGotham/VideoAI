@@ -27,6 +27,11 @@ assets/
 *.mp3
 *.ass
 
+# Model weights (re-downloaded on demand by ultralytics)
+*.pt
+*.onnx
+*.engine
+
 # Local logs & scratch
 scene_log.txt
 temp_*
