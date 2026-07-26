@@ -1,0 +1,36 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Environment & Key files
+.env
+.env.local
+API_Keys.txt
+*.env
+!.env.example
+*.key
+*.pem
+
+# Media & generated output (large; also contains licensed third-party audio)
+output/
+assets/
+*.mp4
+*.mov
+*.wav
+*.mp3
+*.ass
+
+# Local logs & scratch
+scene_log.txt
+temp_*
+.claude/settings.local.json
+.DS_Store
+Thumbs.db
+
