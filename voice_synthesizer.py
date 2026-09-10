@@ -34,6 +34,20 @@ os.makedirs(ASSETS_DIR, exist_ok=True)
 VOICEBOX_URL = os.getenv("VOICEBOX_URL", "http://127.0.0.1:17493").rstrip("/")
 DEFAULT_EDGE_VOICE = "en-US-GuyNeural"
 
+# Edge voice ids look like "en-US-GuyNeural" / "zh-CN-XiaoxiaoNeural".
+_EDGE_VOICE_PATTERN = re.compile(r"^[a-z]{2,3}(?:-[A-Za-z]{2,8})?-[A-Z]{2}-\w+Neural$")
+
+# Voicebox profiles are cloned-voice names, not Edge ids. When Voicebox is
+# unreachable the profile name cannot be handed to Edge-TTS, which rejects
+# anything that is not one of its own ids, so map the profiles this project
+# ships to their nearest Edge equivalent.
+_VOICEBOX_TO_EDGE = {
+    "james earl jones": "en-US-GuyNeural",
+    "morgan freeman": "en-US-GuyNeural",
+    "christopher": "en-US-ChristopherNeural",
+    "david attenborough": "en-GB-RyanNeural",
+}
+
 # Master Audio Director Presets for ElevenLabs
 ELEVENLABS_STABILITY = 0.70
 ELEVENLABS_SIMILARITY_BOOST = 0.82
@@ -120,7 +134,31 @@ def _synthesize_single_chunk(text: str, output_path: str, provider: str, voice: 
             print(f"[VoiceSynthesizer] OpenAI TTS failed ({e}). Falling back to Edge-TTS {DEFAULT_EDGE_VOICE}.")
             _synthesize_edge_tts(text, output_path, voice=DEFAULT_EDGE_VOICE, pitch="+0Hz", rate="+0%")
     else:
-        _synthesize_edge_tts(text, output_path, voice=voice or DEFAULT_EDGE_VOICE, pitch=pitch, rate=rate)
+        _synthesize_edge_tts(text, output_path, voice=_resolve_edge_voice(voice), pitch=pitch, rate=rate)
+
+
+def _resolve_edge_voice(voice: str) -> str:
+    """Maps whatever voice the caller asked for onto a valid Edge-TTS id.
+
+    The Voicebox fallback path arrives here still carrying a Voicebox profile
+    name, and Edge-TTS raises on anything that is not one of its own ids, so an
+    unrecognised name has to degrade to the default rather than be passed on.
+    """
+    candidate = (voice or "").strip()
+    if _EDGE_VOICE_PATTERN.match(candidate):
+        return candidate
+
+    mapped = _VOICEBOX_TO_EDGE.get(candidate.lower())
+    if mapped:
+        print(f"[VoiceSynthesizer] '{candidate}' is a Voicebox profile; using Edge voice {mapped}.")
+        return mapped
+
+    if candidate:
+        print(
+            f"[VoiceSynthesizer] '{candidate}' is not an Edge voice id; "
+            f"using {DEFAULT_EDGE_VOICE}."
+        )
+    return DEFAULT_EDGE_VOICE
 
 
 def _synthesize_voicebox_tts(text: str, output_path: str, voice_name: str = "James Earl Jones"):

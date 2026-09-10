@@ -271,7 +271,9 @@ def _try_nasa_library(query: str, clip_length: float, prefer_video: bool) -> Opt
                 asset_id=nasa_id,
                 title=data.get("title", ""),
                 center=data.get("center", "NASA"),
-                page_url=f"https://images.nasa.gov/details/{nasa_id}",
+                # nasa_id often contains spaces, which would make a dead link.
+                page_url="https://images.nasa.gov/details/"
+                         + urllib.parse.quote(nasa_id, safe=""),
                 license="Public domain (NASA media guidelines)",
                 media_kind="video" if media_type == "video" else "still",
                 duration=round(clip_length, 2),
