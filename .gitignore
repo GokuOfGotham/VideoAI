@@ -39,3 +39,14 @@ temp_*
 .DS_Store
 Thumbs.db
 
+
+# Vendored upstream project - has its own .git and is not imported by VideoAI
+MoneyPrinterTurbo/
+
+# Frame dumps and transcripts from the scanner debugging passes.
+# These are extracted stills from third-party footage - do not publish.
+inspect_*/
+test_f_*.jpg
+
+# Run logs
+*.log

@@ -1,15 +1,37 @@
 [project]
 name = "videoai"
 version = "0.1.0"
-description = "Add your description here"
+description = "Automated short-form video production toolkit"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "edge-tts>=7.2.8",
     "faster-whisper>=1.2.1",
-    "opencv-python>=5.0.0.93",
+    "google-genai>=1.0.0",
+    "httpx>=0.27",
+    "moviepy>=2.2.1",
+    "numpy>=1.26",
+    # headless only: nothing here calls imshow/waitKey, and installing both
+    # opencv distributions puts two copies of cv2 on the path.
     "opencv-python-headless>=5.0.0.93",
+    "pillow>=10.0",
     "python-dotenv>=1.2.2",
     "requests>=2.34.2",
     "ultralytics>=8.4.106",
+    "yt-dlp>=2025.1.15",
 ]
+
+# scipy is an optional fast path in audio_peak_detector; it falls back to the
+# stdlib wave module, so it is deliberately not a hard requirement.
+[project.optional-dependencies]
+fast-audio = ["scipy>=1.11"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# Flat layout: the root holds standalone scripts run as `python <script>.py`,
+# and aw360 is the only importable package. Naming it explicitly stops
+# setuptools auto-discovery from failing on the flat layout.
+packages = ["aw360"]

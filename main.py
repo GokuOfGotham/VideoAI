@@ -247,7 +247,13 @@ def generate_silence_mp3(duration_seconds: float, output_path: str):
     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, check=True)
 
 def sanitize_text_for_human_tts(txt: str) -> str:
-    """Sanitizes script text for TTS engine to prevent robotic vocal glitches, staccato spikes, and capitalization distortion."""
+    """Strip markup for the Edge TTS fallback.
+
+    Edge TTS reads ALL-CAPS words letter by letter, so they have to be folded
+    to lowercase here - which also discards the emphasis the script author
+    intended. The OpenAI path does not use this; it keeps capitalisation,
+    because that model treats caps as emphasis rather than an initialism.
+    """
     txt = re.sub(r'[*_]', '', txt)
     txt = re.sub(r'\[.*?\]', '', txt)
     words = txt.split()
@@ -258,6 +264,148 @@ def sanitize_text_for_human_tts(txt: str) -> str:
     txt = " ".join(clean_words)
     txt = re.sub(r'\s+', ' ', txt).strip()
     return txt
+
+
+# Delivery direction for the steerable TTS model. This is the single biggest
+# lever on whether narration sounds synthetic - the model follows it closely.
+NARRATOR_INSTRUCTIONS = (
+    "Speak as a weathered documentary narrator in the vein of a nature or war "
+    "documentary: low, resonant, unhurried. Deliver with gravity and restraint, "
+    "never announcer-bright and never cheerful. "
+    "Vary your pace deliberately - slow down and lower your volume on reflective "
+    "lines, tighten and press forward on urgent ones. "
+    "Let sentences land. Take a real breath at paragraph breaks rather than "
+    "running straight on. "
+    "Words in capitals are emphasis: hit them harder and slightly slower, but do "
+    "not shout and do not spell them out. "
+    "Trail off slightly on closing phrases instead of ending crisply."
+)
+
+# Deep, documentary-appropriate voices. OpenAI recommends marin/cedar for
+# quality; onyx is the deepest of the original set.
+OPENAI_TTS_MODEL = os.getenv('OPENAI_TTS_MODEL', 'gpt-4o-mini-tts')
+OPENAI_TTS_VOICE = os.getenv('OPENAI_TTS_VOICE', 'onyx')
+# The model caps input around 2000 tokens; chunk well under that on sentence
+# boundaries so a chunk never splits mid-thought.
+TTS_CHUNK_CHARS = 3500
+
+
+def _split_for_tts(text: str, limit: int = TTS_CHUNK_CHARS) -> list[str]:
+    """Split on sentence boundaries, never mid-sentence.
+
+    Chunking is what preserves prosody: the previous implementation cut at every
+    pause tag, so each fragment was synthesized with no knowledge of the
+    sentence around it and the intonation contour restarted from neutral. Here a
+    chunk only ends where a sentence does.
+    """
+    text = re.sub(r'\s+', ' ', text).strip()
+    if len(text) <= limit:
+        return [text] if text else []
+
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    chunks: list[str] = []
+    current = ""
+    for sentence in sentences:
+        if current and len(current) + len(sentence) + 1 > limit:
+            chunks.append(current.strip())
+            current = sentence
+        else:
+            current = f"{current} {sentence}".strip()
+    if current.strip():
+        chunks.append(current.strip())
+    return chunks
+
+
+# ElevenLabs is the most natural of the three engines. Voice and tuning match
+# what tactical-storm-pipeline already uses successfully for narration.
+ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY')
+ELEVENLABS_VOICE_ID = os.getenv('ELEVENLABS_VOICE_ID', 'Dslrhjl3ZpzrctukrQSN')
+ELEVENLABS_MODEL = os.getenv('ELEVENLABS_MODEL', 'eleven_turbo_v2_5')
+
+
+def _elevenlabs_tts_segment(text: str, out_path: str) -> bool:
+    """Synthesize with ElevenLabs.
+
+    stability 0.78 keeps delivery consistent across chunks without flattening
+    it; style 0.35 adds expressiveness without drifting into performance.
+    """
+    if not ELEVENLABS_API_KEY:
+        return False
+    text = _clean_for_openai_tts(text)
+    if not text:
+        return False
+    try:
+        resp = requests.post(
+            f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}",
+            headers={
+                "xi-api-key": ELEVENLABS_API_KEY,
+                "Content-Type": "application/json",
+                "Accept": "audio/mpeg",
+            },
+            json={
+                "text": text,
+                "model_id": ELEVENLABS_MODEL,
+                "voice_settings": {
+                    "stability": 0.78,
+                    "similarity_boost": 0.75,
+                    "style": 0.35,
+                    "use_speaker_boost": True,
+                },
+            },
+            timeout=180,
+        )
+        resp.raise_for_status()
+        with open(out_path, "wb") as fh:
+            fh.write(resp.content)
+        return os.path.exists(out_path) and os.path.getsize(out_path) > 1000
+    except Exception as err:
+        detail = getattr(getattr(err, "response", None), "text", "")[:200]
+        print(f"[!] ElevenLabs TTS failed ({err}){' - ' + detail if detail else ''}")
+        return False
+
+
+def _clean_for_openai_tts(txt: str) -> str:
+    """Remove markup while preserving capitalisation.
+
+    Asterisks and bracket tags would be read aloud, so they go. Capitals stay:
+    the steerable model is told to treat them as emphasis, which is the whole
+    point of the direction in NARRATOR_INSTRUCTIONS.
+    """
+    txt = re.sub(r'\[.*?\]', ' ', txt)
+    txt = re.sub(r'[*_`]', '', txt)
+    return re.sub(r'\s+', ' ', txt).strip()
+
+
+def _openai_tts_segment(text: str, out_path: str) -> bool:
+    """Synthesize one contiguous passage with the steerable OpenAI model."""
+    if not OPENAI_API_KEY:
+        return False
+    text = _clean_for_openai_tts(text)
+    if not text:
+        return False
+    try:
+        resp = requests.post(
+            "https://api.openai.com/v1/audio/speech",
+            headers={
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": OPENAI_TTS_MODEL,
+                "voice": OPENAI_TTS_VOICE,
+                "input": text,
+                "instructions": NARRATOR_INSTRUCTIONS,
+                "response_format": "mp3",
+            },
+            timeout=180,
+        )
+        resp.raise_for_status()
+        with open(out_path, "wb") as fh:
+            fh.write(resp.content)
+        return os.path.exists(out_path) and os.path.getsize(out_path) > 1000
+    except Exception as err:
+        print(f"[!] OpenAI TTS failed ({err}); falling back to Edge TTS.")
+        return False
 
 def generate_voiceover_audio(script_text: str, filename_prefix: str) -> tuple[str, str]:
     """Generates voiceover using 2026 script formatting rules, dynamic micro-pauses, and baritone tuning."""
@@ -307,30 +455,53 @@ def generate_voiceover_audio(script_text: str, filename_prefix: str) -> tuple[st
         i += 2
 
     import edge_tts
-    
+
     audio_parts = []
     part_idx = 0
-    
+    used_engine = None
+
     for text_part, pause_dur in segments:
         if text_part:
-            part_path = os.path.abspath(os.path.join(OUTPUT_DIR, f'temp_part_{filename_prefix}_{part_idx}.mp3'))
-            tts_ready_text = sanitize_text_for_human_tts(text_part)
-            async def run_edge_tts(txt, path):
-                communicate = edge_tts.Communicate(
-                    txt, 
-                    MORGAN_FREEMAN_VOICE, 
-                    pitch=MORGAN_FREEMAN_PITCH, 
-                    rate=MORGAN_FREEMAN_RATE
-                )
-                await communicate.save(path)
-            
-            try:
-                asyncio.run(run_edge_tts(tts_ready_text, part_path))
-                if os.path.exists(part_path) and os.path.getsize(part_path) > 100:
+            # Synthesize the whole passage in as few calls as possible, split
+            # only on sentence boundaries. Splitting more finely than this is
+            # what made the delivery sound disjointed.
+            for chunk_idx, chunk in enumerate(_split_for_tts(text_part)):
+                part_path = os.path.abspath(os.path.join(
+                    OUTPUT_DIR, f'temp_part_{filename_prefix}_{part_idx}_{chunk_idx}.mp3'))
+
+                # Engine preference, most to least natural. Capitalisation is
+                # preserved for both API engines so the emphasis the script
+                # author wrote actually survives into the delivery.
+                if _elevenlabs_tts_segment(chunk, part_path):
                     audio_parts.append(part_path)
-            except Exception as e:
-                print(f"[!] Error generating TTS segment '{text_part[:20]}...': {e}")
-                
+                    used_engine = used_engine or f"ElevenLabs ({ELEVENLABS_MODEL})"
+                    continue
+
+                if _openai_tts_segment(chunk, part_path):
+                    audio_parts.append(part_path)
+                    used_engine = used_engine or f"OpenAI {OPENAI_TTS_MODEL} ({OPENAI_TTS_VOICE})"
+                    continue
+
+                # Fallback: Edge TTS. No pitch shift - post-hoc pitch bending
+                # introduces formant artefacts and is a giveaway on its own.
+                tts_ready_text = sanitize_text_for_human_tts(chunk)
+
+                async def run_edge_tts(txt, path):
+                    communicate = edge_tts.Communicate(
+                        txt,
+                        MORGAN_FREEMAN_VOICE,
+                        rate=MORGAN_FREEMAN_RATE,
+                    )
+                    await communicate.save(path)
+
+                try:
+                    asyncio.run(run_edge_tts(tts_ready_text, part_path))
+                    if os.path.exists(part_path) and os.path.getsize(part_path) > 100:
+                        audio_parts.append(part_path)
+                        used_engine = used_engine or f"Edge TTS ({MORGAN_FREEMAN_VOICE})"
+                except Exception as e:
+                    print(f"[!] Error generating TTS segment '{chunk[:20]}...': {e}")
+
         if pause_dur and pause_dur > 0.05:
             silence_path = os.path.abspath(os.path.join(OUTPUT_DIR, f'temp_silence_{filename_prefix}_{part_idx}.mp3'))
             try:
@@ -386,8 +557,10 @@ def generate_voiceover_audio(script_text: str, filename_prefix: str) -> tuple[st
                 pass
 
     if os.path.exists(audio_mp3) and os.path.getsize(audio_mp3) > 1000:
-        print(f'[+] 2026 Paced Voiceover with Micro-Pauses generated ({os.path.getsize(audio_mp3)} bytes)')
-        return audio_mp3, f"Documentary Baritone ({MORGAN_FREEMAN_VOICE})"
+        engine = used_engine or "unknown engine"
+        print(f'[+] 2026 Paced Voiceover generated via {engine} '
+              f'({os.path.getsize(audio_mp3)} bytes)')
+        return audio_mp3, f"Documentary Baritone ({engine})"
         
     return None, "None"
 
