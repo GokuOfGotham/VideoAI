@@ -107,8 +107,15 @@ Sources, tried in order:
 2. **SpaceX** — launch photography from each launch's Flickr originals, plus
    launch webcasts, whose YouTube ids are handed to the b-roll pipeline so the
    footage gets cut the same way.
-3. **NASA APOD** — high-resolution astronomy stills. Uses `NASA_API_KEY`;
-   without one it falls back to the heavily rate-limited `DEMO_KEY`.
+3. **NASA library again, broadened** — NASA's search is literal, so
+   `rocket grid fins deployment steering` matches nothing while `rocket`
+   matches thousands of clips. A miss retries with progressively shorter
+   queries anchored on the space terms before anything else is tried.
+4. **NASA APOD** — high-resolution astronomy stills. Uses `NASA_API_KEY`;
+   without one it falls back to the heavily rate-limited `DEMO_KEY`. APOD has
+   no search endpoint — it only serves a date or a random pick — so it is
+   consulted **only for astronomy scenes** (nebula, eclipse, night sky). A
+   scene about landing legs never gets a random galaxy.
 
 Stills get a slow Ken Burns push rather than being held static, because a
 frozen frame under narration reads as a broken video.

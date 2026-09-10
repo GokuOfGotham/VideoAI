@@ -77,6 +77,74 @@ SPACE_KEYWORDS = frozenset({
 })
 
 
+# APOD is an astronomy photo feed with no search endpoint - it can only return
+# a given date or a random selection. That makes it useful filler for a scene
+# about the night sky and actively wrong for one about landing legs, so it is
+# only consulted when the query is astronomical rather than hardware.
+ASTRONOMY_KEYWORDS = frozenset({
+    "galaxy", "nebula", "star", "stars", "starfield", "cosmos", "cosmic",
+    "universe", "supernova", "aurora", "eclipse", "comet", "meteor", "asteroid",
+    "telescope", "hubble", "webb", "jwst", "exoplanet", "interstellar",
+    "constellation", "astronomy", "astronomical", "night sky", "deep space",
+    "milky way", "black hole", "solar system", "jupiter", "saturn", "venus",
+    "mercury", "neptune", "uranus", "pluto", "mars", "moon", "lunar", "solar",
+})
+
+# Words that describe launch hardware or operations rather than the sky.
+_HARDWARE_HINTS = frozenset({
+    "booster", "engine", "grid", "fin", "fins", "landing", "land", "descent",
+    "thrust", "stage", "nozzle", "fairing", "payload", "launchpad", "pad",
+    "rocket", "falcon", "starship", "dragon", "capsule", "reignition",
+    "maneuver", "guidance", "droneship", "barge", "recovery", "liftoff",
+})
+
+_STOPWORDS = frozenset({
+    "the", "a", "an", "of", "and", "or", "in", "on", "at", "to", "for", "with",
+    "from", "by", "its", "it", "into", "over", "back", "how", "why", "that",
+    "this", "shot", "footage", "video", "clip", "scene", "view",
+})
+
+
+def looks_like_astronomy(text: str) -> bool:
+    """True when a query is about the sky rather than about flight hardware."""
+    lowered = (text or "").lower()
+    words = set(re.findall(r"[a-z0-9]+", lowered))
+    if words & _HARDWARE_HINTS:
+        return False
+    if words & ASTRONOMY_KEYWORDS:
+        return True
+    return any(kw in lowered for kw in ASTRONOMY_KEYWORDS if " " in kw)
+
+
+def relaxed_queries(query: str) -> List[str]:
+    """Progressively broader versions of a query, for a second search pass.
+
+    NASA's library is large but literal: "rocket grid fins deployment steering"
+    matches nothing, while "rocket" matches thousands of clips. Broadening beats
+    falling through to an unrelated source.
+    """
+    words = [w for w in re.findall(r"[a-z0-9]+", (query or "").lower())
+             if w not in _STOPWORDS and len(w) > 2]
+    out = []
+
+    # The space terms carry the subject; lead with those.
+    anchors = [w for w in words if w in SPACE_KEYWORDS]
+    if anchors:
+        out.append(" ".join(anchors[:3]))
+        out.append(anchors[0])
+    if len(words) > 2:
+        out.append(" ".join(words[:2]))
+    if words:
+        out.append(words[0])
+
+    seen, unique = set(), []
+    for q in out:
+        if q and q != query.lower() and q not in seen:
+            seen.add(q)
+            unique.append(q)
+    return unique
+
+
 def looks_like_space(text: str) -> bool:
     """True when a scene query is about spaceflight or astronomy."""
     lowered = (text or "").lower()
@@ -236,7 +304,17 @@ def _best_nasa_image(files: List[str]) -> Optional[str]:
     return images[0].replace("http://", "https://")
 
 
-def _try_nasa_library(query: str, clip_length: float, prefer_video: bool) -> Optional[SpaceClip]:
+def _try_nasa_library(
+    query: str, clip_length: float, prefer_video: bool, label: Optional[str] = None
+) -> Optional[SpaceClip]:
+    """Searches the NASA library for `query`.
+
+    `label` is the original scene query when this is a broadened retry, so the
+    clip is cached against what the caller actually asked for.
+    """
+    cache_key = label or query
+    if label:
+        print(f"[SpaceMedia] Broadening '{label}' -> '{query}'")
     kinds = ["video", "image"] if prefer_video else ["image", "video"]
 
     for media_type in kinds:
@@ -277,7 +355,7 @@ def _try_nasa_library(query: str, clip_length: float, prefer_video: bool) -> Opt
                 license="Public domain (NASA media guidelines)",
                 media_kind="video" if media_type == "video" else "still",
                 duration=round(clip_length, 2),
-                query=query,
+                query=cache_key,
                 requested_duration=round(clip_length, 2),
             )
             _record(clip)
@@ -533,11 +611,23 @@ def fetch_space_clip(
         print(f"[SpaceMedia] Reusing cached clip for '{query}': {Path(reused.path).name}")
         return reused
 
-    for attempt in (
+    attempts = [
         lambda: _try_nasa_library(query, clip_length, prefer_video),
         lambda: _try_spacex(query, clip_length),
-        lambda: _try_apod(query, clip_length),
-    ):
+    ]
+
+    # Broaden the NASA search before giving up on it. A wider match from the
+    # right archive beats a precise match from an unrelated one.
+    for relaxed in relaxed_queries(query):
+        attempts.append(
+            lambda r=relaxed: _try_nasa_library(r, clip_length, prefer_video, label=query)
+        )
+
+    # APOD cannot be searched, so it only makes sense for astronomy scenes.
+    if looks_like_astronomy(query):
+        attempts.append(lambda: _try_apod(query, clip_length))
+
+    for attempt in attempts:
         clip = attempt()
         if clip:
             return clip
