@@ -59,6 +59,12 @@ def fetch_material_for_scene(
     pixabay_key = os.getenv("PIXABAY_API_KEY")
     broll_priority = os.getenv("YOUTUBE_BROLL_PRIORITY", "fallback").strip().lower()
 
+    # Space scenes go to NASA/SpaceX first: the footage is public domain and a
+    # far better match than whatever "rocket" returns from a stock library.
+    space_clip = _fetch_space_media(keywords, target_duration)
+    if space_clip and os.path.exists(space_clip):
+        return space_clip
+
     if broll_priority == "first":
         clip_path = _fetch_youtube_broll(keywords, target_duration)
         if clip_path and os.path.exists(clip_path):
@@ -81,6 +87,27 @@ def fetch_material_for_scene(
 
     # Local footage fallback
     return _search_local_media(keywords)
+
+
+def _fetch_space_media(keywords: str, target_duration: float) -> Optional[str]:
+    """Sources NASA/SpaceX media for space scenes, or None to fall through.
+
+    Imported lazily and skipped entirely for non-space keywords, so the tier
+    costs nothing on the gaming and military scenes that dominate this project.
+    """
+    if os.getenv("SPACE_MEDIA_ENABLED", "1").strip().lower() in ("0", "false", "no"):
+        return None
+
+    try:
+        from space_media_sourcer import fetch_space_media, looks_like_space
+    except ImportError as exc:
+        print(f"[MaterialFetcher] Space media tier unavailable ({exc}).")
+        return None
+
+    if not looks_like_space(keywords):
+        return None
+
+    return fetch_space_media(keywords, target_duration=target_duration)
 
 
 def _fetch_youtube_broll(keywords: str, target_duration: float) -> Optional[str]:

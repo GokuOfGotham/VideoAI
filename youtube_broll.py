@@ -24,7 +24,6 @@ import hashlib
 import json
 import os
 import re
-import subprocess
 import sys
 import urllib.parse
 from dataclasses import asdict, dataclass
@@ -32,6 +31,18 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
+
+# Shared FFmpeg/probe helpers, aliased to the private names this module has
+# always used so its call sites and tests stay unchanged.
+from media_common import (
+    detect_scene_cuts as _detect_scene_cuts,
+    env_float as _env_float,
+    env_int as _env_int,
+    media_duration as _media_duration,
+    normalise_clip as _normalise_clip,
+    pick_longest_shot as _pick_longest_shot,
+    target_resolution as _target_resolution,
+)
 
 load_dotenv()
 
@@ -50,26 +61,7 @@ _CC_SEARCH_FILTER = "EgIwAQ%3D%3D"
 _CC_LICENCE_MARKER = "creative commons"
 
 
-def _env_float(name: str, default: float) -> float:
-    try:
-        return float(os.getenv(name, "") or default)
-    except ValueError:
-        return default
 
-
-def _env_int(name: str, default: int) -> int:
-    try:
-        return int(os.getenv(name, "") or default)
-    except ValueError:
-        return default
-
-
-def _target_resolution() -> Tuple[int, int]:
-    raw = os.getenv("YOUTUBE_BROLL_RESOLUTION", "1080x1920").lower().strip()
-    match = re.fullmatch(r"(\d+)\s*x\s*(\d+)", raw)
-    if not match:
-        return 1080, 1920
-    return int(match.group(1)), int(match.group(2))
 
 
 @dataclass
@@ -234,60 +226,7 @@ def _probe_window(source_duration: float, clip_length: float, query: str) -> Tup
     return start, probe_length
 
 
-def _detect_scene_cuts(video_path: Path) -> List[float]:
-    """Returns timestamps of hard cuts inside a clip, via FFmpeg scene scores."""
-    threshold = _env_float("YOUTUBE_BROLL_SCENE_THRESHOLD", 0.30)
-    select_expr = f"select='gt(scene,{threshold})',metadata=print:file=-"
-    cmd = [
-        "ffmpeg", "-hide_banner", "-nostats",
-        "-i", str(video_path),
-        "-an", "-sn",
-        "-filter:v", select_expr,
-        "-f", "null", "-",
-    ]
-    try:
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
-    except (subprocess.SubprocessError, OSError):
-        return []
 
-    stream = f"{res.stdout}\n{res.stderr}"
-    return sorted({float(t) for t in re.findall(r"pts_time:([0-9.]+)", stream)})
-
-
-def _media_duration(video_path: Path) -> float:
-    cmd = [
-        "ffprobe", "-v", "error",
-        "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1",
-        str(video_path),
-    ]
-    try:
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        return float(res.stdout.strip())
-    except (subprocess.SubprocessError, OSError, ValueError):
-        return 0.0
-
-
-def _pick_longest_shot(cuts: List[float], duration: float, clip_length: float) -> float:
-    """Returns the offset of the longest uninterrupted shot in the window.
-
-    Continuous footage cuts better under narration than a segment that happens
-    to straddle an edit, so the longest gap between detected cuts wins.
-    """
-    if duration <= clip_length:
-        return 0.0
-
-    boundaries = [0.0] + [c for c in cuts if 0.0 < c < duration] + [duration]
-    best_start, best_length = 0.0, 0.0
-    for start, end in zip(boundaries, boundaries[1:]):
-        if end - start > best_length:
-            best_start, best_length = start, end - start
-
-    if best_length < clip_length:
-        return max(0.0, (duration - clip_length) / 2)
-
-    # Centre the cut inside the shot, away from the edits at either edge.
-    return min(best_start + (best_length - clip_length) / 2, duration - clip_length)
 
 
 # --- Download & normalise ---------------------------------------------------
@@ -339,35 +278,6 @@ def _download_probe(video_id: str, start: float, length: float, dest: Path, min_
             return True
     return False
 
-
-def _normalise_clip(source: Path, dest: Path, offset: float, length: float) -> bool:
-    width, height = _target_resolution()
-    fps = _env_int("YOUTUBE_BROLL_FPS", 30)
-    vf = (
-        f"scale={width}:{height}:force_original_aspect_ratio=increase,"
-        f"crop={width}:{height},setsar=1,fps={fps}"
-    )
-    cmd = [
-        "ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error",
-        "-ss", f"{offset:.3f}",
-        "-t", f"{length:.3f}",
-        "-i", str(source),
-        "-an",
-        "-vf", vf,
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
-        "-pix_fmt", "yuv420p",
-        str(dest),
-    ]
-    try:
-        subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=300)
-    except subprocess.CalledProcessError as exc:
-        print(f"[YouTubeBRoll] Normalisation failed: {(exc.stderr or '')[-400:]}")
-        return False
-    except (subprocess.SubprocessError, OSError) as exc:
-        print(f"[YouTubeBRoll] Normalisation failed ({exc}).")
-        return False
-
-    return dest.exists() and dest.stat().st_size > 10_000
 
 
 # --- Attribution ledger -----------------------------------------------------

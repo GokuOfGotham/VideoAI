@@ -13,6 +13,9 @@ frame, and renders finished vertical cuts with FFmpeg.
 - **YouTube b-roll** — `youtube_broll.py` fills gaps the stock libraries can't,
   pulling only the seconds it needs, cutting on the longest uninterrupted shot,
   and logging credit for everything it caches.
+- **Space media** — `space_media_sourcer.py` sources spaceflight footage and
+  imagery from NASA and SpaceX for space videos, ahead of the generic stock
+  libraries.
 - **Subject detection** — OpenCV-backed passes that scan frames for people or
   body parts so clips can be filtered down to hardware-only footage.
 - **Voiceover** — narration through a local Voicebox TTS server, Edge TTS, or
@@ -83,6 +86,40 @@ Tuning lives in `.env` (`YOUTUBE_BROLL_*`) — most usefully
 `YOUTUBE_BROLL_PRIORITY` to move the tier ahead of the stock APIs (`first`) or
 switch it off (`off`).
 
+### Space media (NASA / SpaceX)
+
+Space scenes are sourced from NASA and SpaceX *before* the generic stock
+libraries — the footage is public domain and a far better match than whatever
+"rocket" returns from a stock search. The tier only engages when the scene
+keywords look like spaceflight or astronomy, so it costs nothing on the gaming
+and military scenes.
+
+```bash
+python space_media_sourcer.py --query "saturn v apollo launch" --duration 6
+python space_media_sourcer.py --query "deep space nebula" --stills-only
+python space_media_sourcer.py --check          # which upstream APIs are reachable
+python space_media_sourcer.py --attribution    # print the credit ledger
+```
+
+Sources, tried in order:
+
+1. **NASA Image and Video Library** — real MP4 footage, no API key needed.
+2. **SpaceX** — launch photography from each launch's Flickr originals, plus
+   launch webcasts, whose YouTube ids are handed to the b-roll pipeline so the
+   footage gets cut the same way.
+3. **NASA APOD** — high-resolution astronomy stills. Uses `NASA_API_KEY`;
+   without one it falls back to the heavily rate-limited `DEMO_KEY`.
+
+Stills get a slow Ken Burns push rather than being held static, because a
+frozen frame under narration reads as a broken video.
+
+> **SpaceX API availability.** The public instance at `api.spacexdata.com` goes
+> down for stretches at a time — it was returning Cloudflare `525` throughout
+> this feature's development. Launch data is cached to disk on first success so
+> the tier keeps working through an outage, and every call treats absence as
+> normal and falls through to NASA. Point `SPACEX_API_BASE` at a mirror if you
+> run one.
+
 ## Licensing note
 
 Music retrieved through the Epidemic Sound API is licensed to **your** account.
@@ -92,6 +129,14 @@ and is not tracked.
 
 Source footage is your own responsibility: confirm the rights on anything you
 publish, particularly third-party or government-released material.
+
+NASA material is public domain, with the caveats NASA itself publishes: its
+logos and insignia are restricted, and the media library hosts some third-party
+content that only NASA has cleared. SpaceX has released its launch photography
+into the public domain. APOD is the exception — it frequently features privately
+owned astrophotography, so entries carrying a `copyright` field are recorded as
+**permission required** rather than public domain. All of it lands in
+`assets/materials/space/ATTRIBUTION.md`.
 
 YouTube b-roll defaults to `YOUTUBE_BROLL_LICENSE=cc`, keeping only videos
 YouTube reports as Creative Commons. Those permit reuse **with credit** — the

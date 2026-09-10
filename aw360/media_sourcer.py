@@ -57,6 +57,12 @@ class MediaSourcer:
             if veo_file:
                 return veo_file
 
+        # 2b. Space scenes: NASA / SpaceX public-domain media ($0.00 cost)
+        space_clip = self._fetch_space_media(search_query, scene.get("duration_est", 6.0))
+        if space_clip:
+            print(f"   [MediaSourcer] Sourced NASA/SpaceX media ($0.00 cost): {search_query}")
+            return space_clip
+
         # 3. Mode 'stock' or 'hybrid': Search Pexels HD Stock Video ($0.00 cost)
         if PEXELS_API_KEY or self.mode in ["stock", "hybrid"]:
             video_url = self._search_pexels_video(search_query)
@@ -93,6 +99,31 @@ class MediaSourcer:
         )
         return procedural_out
 
+    def _fetch_space_media(self, query: str, duration: float) -> str:
+        """Sources NASA/SpaceX media for space scenes, or None to fall through."""
+        if os.getenv("SPACE_MEDIA_ENABLED", "1").strip().lower() in ("0", "false", "no"):
+            return None
+
+        try:
+            self._ensure_project_root_importable()
+            from space_media_sourcer import fetch_space_media, looks_like_space
+        except ImportError as e:
+            print(f"   [MediaSourcer] Space media tier unavailable ({e}).")
+            return None
+
+        if not looks_like_space(query):
+            return None
+
+        return fetch_space_media(query, target_duration=float(duration or 6.0))
+
+    @staticmethod
+    def _ensure_project_root_importable():
+        """Puts the project root on sys.path so root-level modules resolve."""
+        import sys
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
+
     def _fetch_youtube_broll(self, query: str, duration: float) -> str:
         """Cuts licence-filtered b-roll from YouTube, or None to fall through.
 
@@ -103,10 +134,7 @@ class MediaSourcer:
             return None
 
         try:
-            import sys
-            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            if project_root not in sys.path:
-                sys.path.insert(0, project_root)
+            self._ensure_project_root_importable()
             from youtube_broll import fetch_youtube_broll
         except ImportError as e:
             print(f"   [MediaSourcer] YouTube b-roll tier unavailable ({e}).")
