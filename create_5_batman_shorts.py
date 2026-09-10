@@ -34,6 +34,11 @@ from visual_hud_validator import (
     validate_candidate_clip,
 )
 
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", os.path.join(PROJECT_ROOT, "output"))
+MUSIC_DIR = os.getenv("EPIDEMIC_MUSIC_DIR", os.path.join(PROJECT_ROOT, "assets", "epidemic_sound"))
+
+
 EPIC_THEMES = [
     ("Wrath_of_Arrius.mp3", "Wrath of Gotham"),
     ("The_Final_Charge.mp3", "The Final Stand"),
@@ -228,7 +233,7 @@ def main():
         print(f"Error: Movie file not found: {video_path}")
         return
 
-    output_dir = r"A:\AI\VideoAI\output\batman_shorts"
+    output_dir = os.path.join(OUTPUT_DIR, "batman_shorts")
     temp_dir = os.path.join(output_dir, "_temp_scan")
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(temp_dir, exist_ok=True)

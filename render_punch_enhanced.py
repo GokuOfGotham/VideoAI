@@ -1,9 +1,14 @@
-﻿import os, subprocess
+import os, subprocess
 
-out_dir = r'A:\AI\VideoAI\output'
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", os.path.join(PROJECT_ROOT, "output"))
+MUSIC_DIR = os.getenv("EPIDEMIC_MUSIC_DIR", os.path.join(PROJECT_ROOT, "assets", "epidemic_sound"))
+
+
+out_dir = OUTPUT_DIR
 os.makedirs(out_dir, exist_ok=True)
 
-music_src = r'A:\AI\VideoAI\assets\epidemic_sound\Final_Frontier.mp3'
+music_src = os.path.join(MUSIC_DIR, "Final_Frontier.mp3")
 
 # Video 1: 4K Movie Ace Chemicals continuous single scene
 video_4k = r'M:\Videos\Gaming\PlayStation 5\Batman Arkham Knight\Batman_ Arkham Knight (The Movie).mp4'

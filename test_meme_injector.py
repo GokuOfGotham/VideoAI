@@ -13,6 +13,11 @@ import subprocess
 from pathlib import Path
 import meme_injector
 
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", os.path.join(PROJECT_ROOT, "output"))
+MUSIC_DIR = os.getenv("EPIDEMIC_MUSIC_DIR", os.path.join(PROJECT_ROOT, "assets", "epidemic_sound"))
+
+
 def test_all_injection_modes():
     print("==================================================================")
     print("       RUNNING MEME INJECTOR AUTOMATED VERIFICATION SUITE         ")
@@ -30,10 +35,10 @@ def test_all_injection_modes():
     print("  [+] Test 1 Passed: Asset bank populated and mapped correctly.")
 
     # Source test video
-    test_video = r"A:\AI\VideoAI\test_preview_18m.mp4"
+    test_video = os.path.join(PROJECT_ROOT, "test_preview_18m.mp4")
     assert os.path.isfile(test_video), f"Test video not found: {test_video}"
 
-    out_dir = r"A:\AI\VideoAI\output\memes_test"
+    out_dir = os.path.join(OUTPUT_DIR, "memes_test")
     os.makedirs(out_dir, exist_ok=True)
 
     # 2. Test Audio SFX Injection (FFmpeg)

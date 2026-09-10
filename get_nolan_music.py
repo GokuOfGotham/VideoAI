@@ -1,9 +1,14 @@
-﻿import os, httpx, json, re
+import os, httpx, json, re
 from dotenv import load_dotenv
 
-load_dotenv('A:/ai/VideoAI/.env')
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", os.path.join(PROJECT_ROOT, "output"))
+MUSIC_DIR = os.getenv("EPIDEMIC_MUSIC_DIR", os.path.join(PROJECT_ROOT, "assets", "epidemic_sound"))
+
+
+load_dotenv()
 key = os.getenv('EPIDEMIC_SOUND_API_KEY')
-music_dir = 'A:/ai/VideoAI/assets/epidemic_sound'
+music_dir = MUSIC_DIR
 os.makedirs(music_dir, exist_ok=True)
 
 url = 'https://www.epidemicsound.com/json/search/tracks/'

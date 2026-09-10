@@ -1,11 +1,16 @@
-﻿import os, subprocess
+import os, subprocess
 
-video_ace = 'A:/ai/VideoAI/output/raw_60s_ace_chemicals.mp4'
-music_nolan1 = 'A:/ai/VideoAI/assets/epidemic_sound/Final_Frontier.mp3'
-music_nolan2 = 'A:/ai/VideoAI/assets/epidemic_sound/Five_Minutes_Out.mp3'
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", os.path.join(PROJECT_ROOT, "output"))
+MUSIC_DIR = os.getenv("EPIDEMIC_MUSIC_DIR", os.path.join(PROJECT_ROOT, "assets", "epidemic_sound"))
 
-out_master1 = 'A:/ai/VideoAI/output/Batman_60s_DarkKnight_Nolan_SingleScene_Master.mp4'
-out_master2 = 'A:/ai/VideoAI/output/Batman_60s_DarkKnight_Brooding_SingleScene_Master.mp4'
+
+video_ace = os.path.join(OUTPUT_DIR, "raw_60s_ace_chemicals.mp4")
+music_nolan1 = os.path.join(MUSIC_DIR, "Final_Frontier.mp3")
+music_nolan2 = os.path.join(MUSIC_DIR, "Five_Minutes_Out.mp3")
+
+out_master1 = os.path.join(OUTPUT_DIR, "Batman_60s_DarkKnight_Nolan_SingleScene_Master.mp4")
+out_master2 = os.path.join(OUTPUT_DIR, "Batman_60s_DarkKnight_Brooding_SingleScene_Master.mp4")
 
 def render_nolan_mix(video_in, music_in, video_out):
     # Professional cinematic audio balance:

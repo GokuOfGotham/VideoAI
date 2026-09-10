@@ -1,10 +1,15 @@
-﻿import os, subprocess
+import os, subprocess
 
-output_v1 = 'A:/ai/VideoAI/output/Batman_60s_HeavyMetal_Action_Master.mp4'
-output_v2 = 'A:/ai/VideoAI/output/Batman_60s_Blockbuster_Trailer_Master.mp4'
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", os.path.join(PROJECT_ROOT, "output"))
+MUSIC_DIR = os.getenv("EPIDEMIC_MUSIC_DIR", os.path.join(PROJECT_ROOT, "assets", "epidemic_sound"))
 
-music_v1 = 'A:/ai/VideoAI/assets/epidemic_sound/Ten_Times_a_Hundred_Years.mp3'
-music_v2 = 'A:/ai/VideoAI/assets/epidemic_sound/Sentinel_Ascend.mp3'
+
+output_v1 = os.path.join(OUTPUT_DIR, "Batman_60s_HeavyMetal_Action_Master.mp4")
+output_v2 = os.path.join(OUTPUT_DIR, "Batman_60s_Blockbuster_Trailer_Master.mp4")
+
+music_v1 = os.path.join(MUSIC_DIR, "Ten_Times_a_Hundred_Years.mp3")
+music_v2 = os.path.join(MUSIC_DIR, "Sentinel_Ascend.mp3")
 
 # Exact same 4-shot visual sequence (60.0s total)
 c1 = r'M:\Videos\Gaming\PlayStation 5\Batman Arkham Knight\Shorts\Batman and Robyn vs Goliath.mp4' # 2s - 16s (14s)

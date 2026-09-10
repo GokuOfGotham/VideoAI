@@ -1,11 +1,11 @@
-﻿import os, subprocess, httpx, base64, json
+import os, subprocess, httpx, base64, json
 from dotenv import load_dotenv
 
-load_dotenv('A:/ai/VideoAI/.env')
+load_dotenv()
 google_key = os.getenv('GOOGLE_API_KEY')
 
 video = r'M:\Videos\Gaming\PlayStation 5\Batman Arkham Knight\Batman_ Arkham Knight (The Movie).mp4'
-temp_dir = 'A:/ai/VideoAI/temp_4k_inspect'
+temp_dir = os.path.join(PROJECT_ROOT, "temp_4k_inspect")
 os.makedirs(temp_dir, exist_ok=True)
 
 # Test candidate timestamp ranges (in seconds):
@@ -40,4 +40,9 @@ with httpx.Client(timeout=30.0) as client:
 
 # cleanup
 import shutil
+
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", os.path.join(PROJECT_ROOT, "output"))
+MUSIC_DIR = os.getenv("EPIDEMIC_MUSIC_DIR", os.path.join(PROJECT_ROOT, "assets", "epidemic_sound"))
+
 shutil.rmtree(temp_dir, ignore_errors=True)

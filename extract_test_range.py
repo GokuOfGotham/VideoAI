@@ -1,7 +1,12 @@
-﻿import os, subprocess
+import os, subprocess
+
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", os.path.join(PROJECT_ROOT, "output"))
+MUSIC_DIR = os.getenv("EPIDEMIC_MUSIC_DIR", os.path.join(PROJECT_ROOT, "assets", "epidemic_sound"))
+
 
 video = r'M:\Videos\Gaming\PlayStation 5\Batman Arkham Knight\Batman_ Arkham Knight (The Movie).mp4'
-temp_dir = 'A:/ai/VideoAI/temp_frames_search'
+temp_dir = os.path.join(PROJECT_ROOT, "temp_frames_search")
 os.makedirs(temp_dir, exist_ok=True)
 
 # In Arkham Knight, the major Ace Chemicals courtyard/loading dock fight happens around 25m - 35m (1500s - 2100s)

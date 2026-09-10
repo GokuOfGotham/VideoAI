@@ -1,15 +1,20 @@
-﻿import os, subprocess
+import os, subprocess
 
-out_dir = r'A:\AI\VideoAI\output'
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", os.path.join(PROJECT_ROOT, "output"))
+MUSIC_DIR = os.getenv("EPIDEMIC_MUSIC_DIR", os.path.join(PROJECT_ROOT, "assets", "epidemic_sound"))
+
+
+out_dir = OUTPUT_DIR
 os.makedirs(out_dir, exist_ok=True)
 
 video_src = r'M:\Videos\Gaming\PlayStation 5\Batman Arkham Knight\Shorts\Batman Warrior.mp4'
-music_src = r'A:\AI\VideoAI\assets\epidemic_sound\Final_Frontier.mp3'
+music_src = os.path.join(MUSIC_DIR, "Final_Frontier.mp3")
 
-sfx_bone = r'A:\AI\VideoAI\assets\epidemic_sound\sfx\Gore__Bone__Crush__Crunch.mp3'
-sfx_face = r'A:\AI\VideoAI\assets\epidemic_sound\sfx\Fight__Impact__Punch__Face.mp3'
-sfx_body = r'A:\AI\VideoAI\assets\epidemic_sound\sfx\Fight__Impact__Punch__Body.mp3'
-sfx_hard = r'A:\AI\VideoAI\assets\epidemic_sound\sfx\Fight__Impact__Punch__Hit__Hard__Variations.mp3'
+sfx_bone = os.path.join(MUSIC_DIR, "sfx", "Gore__Bone__Crush__Crunch.mp3")
+sfx_face = os.path.join(MUSIC_DIR, "sfx", "Fight__Impact__Punch__Face.mp3")
+sfx_body = os.path.join(MUSIC_DIR, "sfx", "Fight__Impact__Punch__Body.mp3")
+sfx_hard = os.path.join(MUSIC_DIR, "sfx", "Fight__Impact__Punch__Hit__Hard__Variations.mp3")
 
 out_file = os.path.join(out_dir, 'Batman_60s_VERIFIED_COMBAT_PunchEnhanced_Master.mp4')
 

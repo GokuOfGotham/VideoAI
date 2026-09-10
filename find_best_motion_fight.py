@@ -1,4 +1,10 @@
-﻿import cv2, numpy as np, os, subprocess
+import os
+import cv2, numpy as np, os, subprocess
+
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", os.path.join(PROJECT_ROOT, "output"))
+MUSIC_DIR = os.getenv("EPIDEMIC_MUSIC_DIR", os.path.join(PROJECT_ROOT, "assets", "epidemic_sound"))
+
 
 video = r'M:\Videos\Gaming\PlayStation 5\Batman Arkham Knight\Batman_ Arkham Knight (The Movie).mp4'
 print("[*] Scanning 4K Movie for Highest-Intensity Continuous 60s Fight Scene using Motion Energy...")
@@ -18,13 +24,13 @@ for sec in candidates:
     frames = []
     for offset in [0, 15, 30, 45, 60]:
         t_pos = sec + offset
-        cmd = ["ffmpeg", "-y", "-ss", str(t_pos), "-i", video, "-vframes", "1", "-vf", "scale=320:180", "-q:v", "5", f"A:/ai/VideoAI/motion_{offset}.jpg"]
+        cmd = ["ffmpeg", "-y", "-ss", str(t_pos), "-i", video, "-vframes", "1", "-vf", "scale=320:180", "-q:v", "5", os.path.join(PROJECT_ROOT, f"motion_{offset}.jpg")]
         subprocess.run(cmd, capture_output=True)
-        img = cv2.imread(f"A:/ai/VideoAI/motion_{offset}.jpg", cv2.IMREAD_GRAYSCALE)
+        img = cv2.imread(os.path.join(PROJECT_ROOT, f"motion_{offset}.jpg"), cv2.IMREAD_GRAYSCALE)
         if img is not None:
             frames.append(img)
-        if os.path.exists(f"A:/ai/VideoAI/motion_{offset}.jpg"):
-            os.remove(f"A:/ai/VideoAI/motion_{offset}.jpg")
+        if os.path.exists(os.path.join(PROJECT_ROOT, f"motion_{offset}.jpg")):
+            os.remove(os.path.join(PROJECT_ROOT, f"motion_{offset}.jpg"))
 
     if len(frames) >= 4:
         diffs = [np.mean(cv2.absdiff(frames[i], frames[i+1])) for i in range(len(frames)-1)]
