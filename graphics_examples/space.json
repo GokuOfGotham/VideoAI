@@ -1,0 +1,102 @@
+{
+  "preset": "space",
+  "width": 1280,
+  "height": 720,
+  "fps": 30,
+  "duration": 8,
+  "words": [
+    {
+      "word": "A",
+      "start": 0.5,
+      "end": 0.917
+    },
+    {
+      "word": "clearer",
+      "start": 0.917,
+      "end": 1.333
+    },
+    {
+      "word": "view",
+      "start": 1.333,
+      "end": 1.75
+    },
+    {
+      "word": "of",
+      "start": 1.75,
+      "end": 2.167
+    },
+    {
+      "word": "every",
+      "start": 2.167,
+      "end": 2.583
+    },
+    {
+      "word": "story",
+      "start": 2.583,
+      "end": 3.0
+    },
+    {
+      "word": "Keep",
+      "start": 5.5,
+      "end": 5.883
+    },
+    {
+      "word": "the",
+      "start": 5.883,
+      "end": 6.267
+    },
+    {
+      "word": "key",
+      "start": 6.267,
+      "end": 6.65
+    },
+    {
+      "word": "moment",
+      "start": 6.65,
+      "end": 7.033
+    },
+    {
+      "word": "in",
+      "start": 7.033,
+      "end": 7.417
+    },
+    {
+      "word": "focus",
+      "start": 7.417,
+      "end": 7.8
+    }
+  ],
+  "captions": {},
+  "audio": {
+    "provider": "epidemic"
+  },
+  "overlays": [
+    {
+      "type": "lower_third",
+      "start": 0,
+      "end": 3,
+      "title": "MISSION DESK",
+      "subtitle": "VIDEOAI GRAPHICS DEMO"
+    },
+    {
+      "type": "title_card",
+      "start": 3.2,
+      "end": 5.2,
+      "title": "Beyond the frame",
+      "subtitle": "Animated titles \u00b7 Word highlights \u00b7 Clear captions"
+    },
+    {
+      "type": "callout",
+      "start": 5.5,
+      "end": 8,
+      "title": "THE KEY MOMENT",
+      "subtitle": "Exploration"
+    },
+    {
+      "type": "progress_bar",
+      "start": 0,
+      "end": 8,
+      "title": ""
+    }
+  ]
+}
