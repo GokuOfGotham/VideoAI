@@ -5,6 +5,8 @@ and aligns word-level timestamps using Faster-Whisper.
 """
 
 import os
+import json
+from pathlib import Path
 import asyncio
 import subprocess
 import requests
@@ -19,7 +21,7 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 class VoiceoverGenerator:
-    def __init__(self, voice: str = "en-US-ChristopherNeural", cache_dir: str = None):
+    def __init__(self, voice: str = "cedar", cache_dir: str = None):
         self.voice = voice
         self.cache_dir = str(cache_dir or paths.CACHE_DIR)
         os.makedirs(self.cache_dir, exist_ok=True)
@@ -38,15 +40,11 @@ class VoiceoverGenerator:
         if not output_path:
             output_path = os.path.join(self.cache_dir, "narration_full.mp3")
 
-        # 1. Prefer OpenAI HD TTS voice if OPENAI_API_KEY is available
-        generated = False
-        if OPENAI_API_KEY:
-            print("   [VoiceoverGenerator] Generating OpenAI HD Documentary Voiceover (Voice: Onyx)...")
-            generated = self._create_openai_tts(text, output_path, voice="onyx")
-
-        # 2. Fallback to Edge TTS
-        if not generated:
-            print(f"   [VoiceoverGenerator] Generating Edge TTS Voiceover ({self.voice})...")
+        if self.voice == "cedar":
+            if not OPENAI_API_KEY or not self._create_openai_tts(text, output_path, voice="cedar"):
+                raise RuntimeError("Approved Cedar narration unavailable. No alternate voice was substituted.")
+        else:
+            # Explicitly selected free/Edge profile; preserve that choice.
             asyncio.run(self._create_edge_tts(text, output_path))
 
         # 3. Extract word level timestamps using Faster Whisper
@@ -69,7 +67,7 @@ class VoiceoverGenerator:
 
         return output_path, word_timestamps, duration
 
-    def _create_openai_tts(self, text: str, dest_path: str, voice: str = "onyx") -> bool:
+    def _create_openai_tts(self, text: str, dest_path: str, voice: str = "cedar") -> bool:
         """Generates TTS audio via OpenAI Audio API."""
         try:
             url = "https://api.openai.com/v1/audio/speech"
@@ -77,12 +75,10 @@ class VoiceoverGenerator:
                 "Authorization": f"Bearer {OPENAI_API_KEY}",
                 "Content-Type": "application/json"
             }
-            payload = {
-                "model": "tts-1-hd",
-                "input": text,
-                "voice": voice,
-                "speed": 1.05
-            }
+            preset = json.loads((Path(__file__).resolve().parent.parent / "APPROVED_VOICE_PRESET.json").read_text(encoding="utf-8"))
+            payload = {"model": preset["model"], "input": text, "voice": voice,
+                       "speed": preset["speed"], "instructions": preset["instructions"],
+                       "response_format": "mp3"}
             r = requests.post(url, headers=headers, json=payload, timeout=30)
             if r.status_code == 200:
                 with open(dest_path, "wb") as f:

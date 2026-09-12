@@ -14,6 +14,7 @@ Ultra High-Def Studio Vocal Mastering Edition:
 """
 
 import asyncio
+import json
 import os
 import re
 import subprocess
@@ -57,12 +58,17 @@ ELEVENLABS_STYLE_EXAGGERATION = 0.25
 def synthesize_narration(
     text: str,
     output_filename: str = "narration.mp3",
-    provider: str = "voicebox",
-    voice: str = "James Earl Jones",
+    provider: str = "openai",
+    voice: str = "cedar",
     pitch: str = "+0Hz",
-    rate: str = "+0%"
+    rate: str = "+0%",
+    word_timestamps: bool = True,
 ) -> Tuple[str, float, List[Dict]]:
-    """Synthesizes voiceover audio using local Voicebox (James Earl Jones) or fallback TTS with Ultra HD Mastering."""
+    """Synthesizes voiceover audio using local Voicebox (James Earl Jones) or fallback TTS with Ultra HD Mastering.
+
+    ``word_timestamps=False`` skips the Whisper pass, which loads a model per
+    call; producers that only need the segment length can opt out of it.
+    """
     audio_path = str(ASSETS_DIR / output_filename)
 
     # 1. Master Script Normalization
@@ -83,15 +89,15 @@ def synthesize_narration(
         _concat_audio_chunks(chunk_files, audio_path)
 
     # 3. Apply Ultra High-Def Studio Vocal Mastering (7-band EQ + De-esser + Opto-Compressor + LUFS Normalization)
-    _apply_studio_vocal_mastering(audio_path)
+    _apply_studio_vocal_mastering(audio_path, approved=(provider == "openai" and voice == "cedar"))
 
     duration = get_audio_duration(audio_path)
-    timestamps = _extract_word_timestamps(audio_path, normalized_text)
+    timestamps = _extract_word_timestamps(audio_path, normalized_text) if word_timestamps else []
 
     return audio_path, duration, timestamps
 
 
-def _apply_studio_vocal_mastering(audio_path: str):
+def _apply_studio_vocal_mastering(audio_path: str, approved: bool = False):
     """Applies FFmpeg Ultra High-Def Studio Vocal Mastering Filter Chain."""
     temp_mastered = audio_path + ".ultrahd.mp3"
     filter_chain = (
@@ -106,6 +112,8 @@ def _apply_studio_vocal_mastering(audio_path: str):
         "compand=attacks=0.01:decays=0.1:points=-60/-60|-24/-12|-8/-3|0/0:gain=3,"
         "loudnorm=I=-16:LRA=7:TP=-1.5"
     )
+    if approved:
+        filter_chain = json.loads((PROJECT_ROOT / "APPROVED_VOICE_PRESET.json").read_text())["mastering_filter"]
     cmd = ["ffmpeg", "-y", "-i", audio_path, "-af", filter_chain, "-ar", "48000", "-b:a", "320k", temp_mastered]
     try:
         subprocess.run(cmd, capture_output=True, check=True)
@@ -128,11 +136,8 @@ def _synthesize_single_chunk(text: str, output_path: str, provider: str, voice: 
     if provider == "elevenlabs":
         _synthesize_elevenlabs_tts(text, output_path, voice_id=voice)
     elif provider == "openai":
-        try:
-            _synthesize_openai_tts(text, output_path, voice="onyx")
-        except Exception as e:
-            print(f"[VoiceSynthesizer] OpenAI TTS failed ({e}). Falling back to Edge-TTS {DEFAULT_EDGE_VOICE}.")
-            _synthesize_edge_tts(text, output_path, voice=DEFAULT_EDGE_VOICE, pitch="+0Hz", rate="+0%")
+        # A provider failure must not silently replace the user-approved voice.
+        _synthesize_openai_tts(text, output_path, voice=voice)
     else:
         _synthesize_edge_tts(text, output_path, voice=_resolve_edge_voice(voice), pitch=pitch, rate=rate)
 
@@ -262,7 +267,7 @@ def _synthesize_elevenlabs_tts(text: str, output_path: str, voice_id: str = "21m
         _synthesize_edge_tts(text, output_path, DEFAULT_EDGE_VOICE, "+0Hz", "+0%")
 
 
-def _synthesize_openai_tts(text: str, output_path: str, voice: str = "onyx"):
+def _synthesize_openai_tts(text: str, output_path: str, voice: str = "cedar"):
     """Synthesizes text using OpenAI TTS API."""
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
@@ -273,12 +278,11 @@ def _synthesize_openai_tts(text: str, output_path: str, voice: str = "onyx"):
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    payload = {
-        "model": "tts-1-hd",
-        "input": text,
-        "voice": voice,
-        "response_format": "mp3"
-    }
+    preset = json.loads((PROJECT_ROOT / "APPROVED_VOICE_PRESET.json").read_text(encoding="utf-8"))
+    payload = {"model": preset["model"], "input": text, "voice": voice,
+               "response_format": "mp3", "speed": preset["speed"],
+               "instructions": preset["instructions"]}
+
 
     resp = requests.post(url, headers=headers, json=payload, timeout=30)
     resp.raise_for_status()
@@ -291,7 +295,8 @@ def _concat_audio_chunks(chunk_paths: List[str], output_path: str):
     list_file = str(ASSETS_DIR / "concat_chunks.txt")
     with open(list_file, "w", encoding="utf-8") as f:
         for p in chunk_paths:
-            f.write(f"file '{p.replace('\\', '/')}'\n")
+            p_forward = p.replace("\\", "/")
+            f.write(f"file '{p_forward}'\n")
 
     cmd = [
         "ffmpeg", "-y", "-f", "concat", "-safe", "0",

@@ -18,6 +18,11 @@ MANIFEST = {"provider": "epidemic", "api": "official_mcp", "fetched_at": "2026-0
             "sfx": [{"id": "sfx-test-id", "title": "Fixture SFX", "query": "test transition", "gain_db": -14,
                      "start": 1.25, "duration": 0.8}]}
 RENDERED = {**MEDIA, "audio_manifest": MANIFEST}
+PRODUCTION = {"production_review": {"content_type": "documentary", "format": "short",
+              "hook_start_seconds": 0, "hook": "Show the working rig immediately.",
+              "first_payoff_seconds": 3, "first_payoff": "Explain the isolation valve's purpose.",
+              "pacing_review": "No greeting or loading; retain the short explanation.",
+              "audio_mode": "cedar", "standalone": True, "overrides": {}}}
 
 
 class RendererTests(unittest.TestCase):
@@ -79,7 +84,7 @@ class RendererTests(unittest.TestCase):
         self.assertEqual([command[index+1] for index, value in enumerate(command) if value == "-map"],
                          ["[vout]", "[aout0]", "[aout1]"])
         self.assertEqual(command[command.index("-c:a") + 1], "aac")
-        self.assertEqual(command[command.index("-b:a") + 1], "192k")
+        self.assertEqual(command[command.index("-b:a") + 1], "320k")
         self.assertEqual(command[command.index("-map_metadata") + 1], "0")
         self.assertEqual(command[command.index("-map_chapters") + 1], "0")
         self.assertNotIn("-shortest", command)
@@ -164,7 +169,7 @@ class RendererTests(unittest.TestCase):
                     patch("videoai_graphics.compiler.compile_graphics", return_value=COMPILED):
                 with self.assertRaisesRegex(RuntimeError, "Epidemic API unavailable"):
                     if kind == "source":
-                        renderer.render_video({}, source, target, overwrite=True)
+                        renderer.render_video(PRODUCTION, source, target, overwrite=True)
                     else:
                         renderer.render_synthetic({}, target, overwrite=True)
                 encode.assert_not_called()
@@ -193,7 +198,7 @@ class RendererTests(unittest.TestCase):
                     patch.object(renderer, "probe_video", side_effect=fake_probe), \
                     patch("videoai_graphics.compiler.compile_graphics", return_value=COMPILED):
                 target = self.directory / f"{kind}-mixed.mp4"
-                config = {"preset": "space", "epidemic": {"required": True}}
+                config = {**PRODUCTION, "preset": "space", "epidemic": {"required": True}}
                 if kind == "source":
                     result = renderer.render_video(config, source, target, encoder="cpu")
                 else:

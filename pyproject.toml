@@ -18,7 +18,7 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "requests>=2.34.2",
     "ultralytics>=8.4.106",
-    "yt-dlp>=2025.1.15",
+    "yt-dlp[default]>=2026.8.19",
 ]
 
 # scipy is an optional fast path in audio_peak_detector; it falls back to the
@@ -34,4 +34,7 @@ build-backend = "setuptools.build_meta"
 # Flat layout: the root holds standalone scripts run as `python <script>.py`,
 # and aw360 is the only importable package. Naming it explicitly stops
 # setuptools auto-discovery from failing on the flat layout.
-packages = ["aw360"]
+packages = ["aw360", "videoai_policy"]
+
+[tool.setuptools.package-data]
+videoai_policy = ["policy.json"]

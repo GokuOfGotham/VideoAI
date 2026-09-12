@@ -7,6 +7,7 @@ import os
 import json
 from dotenv import load_dotenv
 from google import genai
+from videoai_policy import policy_prompt, ProductionPolicyError
 
 load_dotenv()
 
@@ -21,12 +22,8 @@ class TrendResearcher:
         """
         Generates or selects a high-CTR, high-retention topic for AW360 Animal World 360.
         """
-        system_instruction = (
-            "You are the Lead Creative Director for AW360 Animal World 360, a top-tier YouTube channel "
-            "specializing in viral animal facts, mind-bending biology, and epic wildlife stories. "
-            "Your goal is to engineer videos that achieve 1M+ views by creating un-skippable hooks, "
-            "intense curiosity gaps, and fascinating, verified animal facts."
-        )
+        system_instruction = policy_prompt(include_review=False) + "\nSuggest a topic-specific, fact-checkable concept. Distinguish researched trends from unverified ideas."
+
 
         prompt = (
             f"Generate a viral YouTube Short / video concept for AW360 Animal World 360.\n"
@@ -34,10 +31,10 @@ class TrendResearcher:
             f"Respond ONLY with a valid JSON object matching this schema:\n"
             f"{{\n"
             f'  "topic_name": "Short punchy topic name",\n'
-            f'  "viral_title": "1M-view CTR Title (max 60 chars, emojis allowed)",\n'
+            f'  "viral_title": "Specific, truthful title (max 60 chars, emojis allowed)",\n'
             f'  "hook": "The opening 3-second hook line that stops scrolling instantly",\n'
             f'  "target_emotion": "shock | awe | fear | fascination | humor",\n'
-            f'  "concept_summary": "Brief 2-sentence summary of why this video will go viral",\n'
+            f'  "concept_summary": "Brief 2-sentence summary of why this topic could interest viewers",\n'
             f'  "thumbnail_concept": "Visual description for a viral thumbnail (e.g. glowing eyes in dark ocean)"\n'
             f"}}\n"
         )
@@ -55,15 +52,7 @@ class TrendResearcher:
             data = json.loads(response.text)
             return data
         except Exception as e:
-            # Fallback if json parsing fails
-            return {
-                "topic_name": "Secret Superpowers of Everyday Animals",
-                "viral_title": "Animals with REAL Superpowers You Won't Believe! 😱",
-                "hook": "Did you know there is a shrimp that punches with the speed of a bullet?",
-                "target_emotion": "shock",
-                "concept_summary": "Revealing hidden biological superpowers of familiar animals.",
-                "thumbnail_concept": "Mantis shrimp with glowing hyper-energy punch effect underwater."
-            }
+            raise ProductionPolicyError("Topic generation failed; no unrelated topic was substituted.") from e
 
 if __name__ == "__main__":
     researcher = TrendResearcher()

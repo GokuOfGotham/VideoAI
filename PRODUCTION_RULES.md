@@ -1,0 +1,57 @@
+# VideoAI production rules
+
+The canonical policy is [videoai_policy/policy.json](videoai_policy/policy.json). It contains the user-approved editing, audio, visual, factual and analytics defaults. The same policy is loaded for every supported script provider. Do not maintain separate copies of the rules inside model-specific prompts.
+
+## Every production
+
+Start with the promised conflict or action at second zero; deliver a meaningful first payoff within fifteen seconds. Remove loading, redundant travel, repetition and empty pauses while retaining useful setup and tension. Gameplay highlights default to original game audio. Documentary and lore narration default to the exact saved Cedar preset. Shorts stand alone unless a trailer is specifically requested. Keep footage sharp, sources honest, speech natural, and final checks specific to what was actually inspected.
+
+CTR, APV, completion and stayed-to-watch figures are working benchmarks, not algorithm switches. Six views cannot diagnose a thumbnail or recommendation failure. An average view duration does not locate a retention cliff. Use the retention curve, sample size and traffic sources before deciding a revision.
+
+## Gaming content
+
+The gaming rules in the canonical policy apply to every provider. Prefer focused essays and practical guides when selecting a long-form concept; use complete gameplay moments or insights for Shorts. Honor an existing user choice of format. Each video needs a specific viewer question, objective or payoff beyond showing a game being played.
+
+- Essays: one question and thesis, supported by inspected gameplay and verified research. Use Cedar for analysis and original game audio for key moments.
+- Mechanics, glitch and speedrun guides: show the result immediately, then provide reproducible steps, prerequisites, game version and category rules. Preserve uninterrupted evidence when necessary.
+- Walkthroughs: useful objectives and accurate final-export chapters; cut downtime while retaining navigation and required steps. Verify the scope of a 100% claim.
+- Shorts: one complete moment or insight with the promised payoff. Original game audio for pure highlights; Cedar for narrated analysis. Standalone unless a trailer is requested.
+
+Record the chosen format, viewer question/objective, supporting footage or sources and relevant guide/chapter plan in `production_review.pacing_review`. For existing schema/audio defaults, use `lore` for narrated gaming essays, `documentary` for narrated instructional guides, and `gameplay` for original-audio highlights or unnarrated guides. This avoids treating an analytical essay as a silent gameplay highlight.
+
+These are editorial defaults delivered in the common model prompt. Automated checks do not establish the strength of a thesis, tutorial reproducibility or chapter accuracy; inspect the actual script and export. Test formats against comparable channel results. The [200 million video-essay views in 2024](https://blog.youtube/culture-and-trends/the-joy-of-video-essays/) covers all subjects, not gaming alone, and does not prove that Let's Plays are obsolete.
+
+## Using another AI
+
+Have the assistant read this file, AGENTS.md and the canonical policy before planning. AGENTS.md, CLAUDE.md and GEMINI.md point here. An assistant operating outside this folder can receive the shared prompt:
+
+```powershell
+python policy_tool.py prompt --content-type lore --format long
+python policy_tool.py prompt --content-type gameplay --format short
+```
+
+Add the emitted `production_review` object to the script/config. Fill it with real descriptions and planned times; blank templates deliberately fail. The hook must describe the actual opening; the payoff must name the first delivered answer/action/evidence. `pacing_review` records what was removed and why any deliberate pauses or setup remain.
+
+```powershell
+python policy_tool.py template --content-type documentary --format long
+python policy_tool.py check production.json --duration 540
+```
+
+The check exits nonzero for missing/incomplete review, delayed hook or payoff, conflicting audio mode, promotional standalone Shorts, identified downtime without a reason, and obvious greeting/forced-pause script patterns. Explicit user exceptions go in `overrides` under `hook`, `payoff`, `pacing`, `audio` or `standalone`, each with `reason` and the actual `user_request`. This records an existing choice; it does not require a new approval conversation. Do not invent a user exception to get a pass.
+
+## Enforcement coverage
+
+- `script_generator.py`: shared prompt for OpenAI, Gemini and DeepSeek; validate returned scripts; fail when all providers fail instead of substituting unrelated canned narration.
+- `pipeline.py` and `main.py`: use that generator; natural Cedar defaults. `main.py` narration uses the common synthesizer instead of the old dramatic-pause/alternate-voice chain.
+- AW360: shared script/research instructions and script validation, with no unrelated canned fallback. Its normal narration path defaults to Cedar. The deliberately selected free workflow retains Edge and records its explicit audio exception.
+- `videoai_graphics.renderer.render_video`: requires a production review before the real-input render. With `audio_mode: natural_game`, preserves source audio tracks and does not call Epidemic. Narrated productions retain supporting Epidemic scoring.
+- `aw360.video_renderer`: validates the script before rendering.
+- Pure graphics compilation and synthetic graphics demos remain available for layout development; they are not a completed-production approval. Custom FFmpeg scripts and older one-off builders must run `policy_tool.py check` before final delivery and carry out the visual/audio review.
+
+This does not control an unrelated AI application or prevent code from deliberately bypassing the supported entry points. Plan validation cannot prove that a hook is compelling, facts are true, or footage contains the declared action. Inspect the actual media and report that separately. No views or retention outcome is guaranteed.
+
+## Migration and verification
+
+Legacy scripts/configs without `production_review` now need it when entering guarded production paths. Failed Cedar generation stops rather than quietly changing voices. Provider/API costs are not incurred by printing or checking the policy. Tests use mocked providers and synthetic local media.
+
+The original voice preset remains unchanged. Existing rendered videos are not modified by this update.

@@ -28,6 +28,7 @@ from aw360.voiceover_generator import VoiceoverGenerator
 from aw360.subtitle_burner import SubtitleBurner
 from aw360.video_renderer import VideoRenderer
 from google import genai
+from videoai_policy import policy_prompt, checked_script, ProductionPolicyError
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -95,13 +96,15 @@ class FreeAW360Director:
             return json.load(f)
 
     def _generate_free_script(self, topic_query: str) -> dict:
+        shared = policy_prompt(content_type="documentary", video_format="short")
+        shared += '\nThe caller explicitly selected this free-audio workflow. Set audio_mode to explicit_override and record overrides.audio with user_request="Use the free AW360 workflow with Edge narration" and the reason. Do not switch this workflow to paid narration.'
         prompt = f"""
 Generate an in-depth 3-MINUTE (approx 180 seconds, 400-450 words total) video script for YouTube channel 'AW360 Animal World 360'.
 Topic: {topic_query or '5 Mind-Blowing Animal Superpowers'}
 
 REQUIREMENTS:
 - Total target video duration MUST be approximately 3 MINUTES (180 seconds).
-- Include an un-skippable hook, 5 detailed animal species sections (approx 30s per animal), and a channel subscribe call-to-action ending.
+- Include an immediate specific hook, an early payoff, and a complete story without padding or a promotional ending.
 - Every scene MUST explicitly define the 'target_animal_species'.
 
 Return ONLY a valid JSON object matching this schema:
@@ -118,7 +121,7 @@ Return ONLY a valid JSON object matching this schema:
   "scenes": [
     {{
       "scene_id": 1,
-      "narration": "First 15-20 second hook introducing the topic and first creature.",
+      "narration": "Immediate specific hook and first useful fact about the creature.",
       "target_animal_species": "Mantis shrimp",
       "visual_search_query": "Mantis shrimp",
       "duration_est": 20.0
@@ -130,34 +133,15 @@ Return ONLY a valid JSON object matching this schema:
             res = self.genai_client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=prompt,
-                config={"response_mime_type": "application/json"}
+                config={"system_instruction": shared, "response_mime_type": "application/json"}
             )
-            return json.loads(res.text)
+            return checked_script(json.loads(res.text), duration=180)
         except Exception as e:
             print(f"   [Scriptwriter Note]: {e}")
-            return self._fallback_3min_script()
+            raise ProductionPolicyError("Free director needs a valid reviewed script; no canned substitute was used.") from e
 
     def _fallback_3min_script(self) -> dict:
-        return {
-            "metadata": {
-                "channel_name": "AW360 Animal World 360",
-                "video_title": "5 Animals With REAL Superpowers That Defy Science! 🤯 (Full 3-Min Feature)",
-                "description": "Explore 5 incredible creatures with mind blowing biological superpowers! From bullet fast punches to immortal cells and electrical radar, these real animals challenge everything we know about biology. Subscribe to AW360 Animal World 360 for daily nature features! #AW360 #animals #wildlife #nature #science",
-                "tags": ["animal facts", "aw360", "superpowers", "wildlife", "documentary"],
-                "pinned_comment": "Which of these 5 superpowers blew your mind the most? Tell us below! 👇",
-                "thumbnail_prompt": "Mantis shrimp underwater releasing shockwave strike"
-            },
-            "full_voiceover_text": "Welcome back to AW360 Animal World 360. Today we are counting down five unbelievable animals with real life superpowers that defy modern science. First up: the Mantis Shrimp. Beneath tropical ocean waters, this tiny crustacean packs the fastest strike in the animal kingdom. Its hammer like claws accelerate faster than a point twenty two caliber bullet, hitting prey with over fifteen hundred newtons of force. The strike is so insanely fast it boils the surrounding water and creates underwater shockwaves! Next, meet the immortal jellyfish, Turritopsis dohrnii. When old, sick, or injured, this creature can reset its cells back to a baby polyp stage, effectively living forever. Third, the Archerfish shoots precise high pressure water jets up to six feet in the air to knock insects right off branches into its mouth. Fourth, the electric eel generates over six hundred volts of electricity, enough to stun a horse. And finally, the Tardigrade, micro microscopic water bears that can survive absolute zero, cosmic radiation, and the vacuum of outer space. Subscribe to AW360 Animal World 360 for more epic wildlife stories!",
-            "scenes": [
-                {"scene_id": 1, "narration": "Welcome back to AW360 Animal World 360. Today we are counting down five unbelievable animals with real life superpowers that defy modern science.", "target_animal_species": "Mantis shrimp", "visual_search_query": "Mantis shrimp", "duration_est": 18.0},
-                {"scene_id": 2, "narration": "First up: the Mantis Shrimp. Its hammer like claws accelerate faster than a point twenty two caliber bullet, hitting prey with over fifteen hundred newtons of force!", "target_animal_species": "Mantis shrimp", "visual_search_query": "Mantis shrimp", "duration_est": 22.0},
-                {"scene_id": 3, "narration": "Next, meet the immortal jellyfish, Turritopsis dohrnii. When old or injured, this creature can reset its cells back to a baby polyp stage, living forever.", "target_animal_species": "Turritopsis dohrnii", "visual_search_query": "Turritopsis dohrnii", "duration_est": 22.0},
-                {"scene_id": 4, "narration": "Third, the Archerfish shoots precise high pressure water jets up to six feet in the air to knock insects right off branches into its mouth.", "target_animal_species": "Archerfish", "visual_search_query": "Archerfish", "duration_est": 20.0},
-                {"scene_id": 5, "narration": "Fourth, the electric eel generates over six hundred volts of electricity, enough to stun large predators in muddy river waters.", "target_animal_species": "Electric eel", "visual_search_query": "Electric eel", "duration_est": 20.0},
-                {"scene_id": 6, "narration": "And finally, the Tardigrade, microscopic water bears that can survive absolute zero, cosmic radiation, and the vacuum of space.", "target_animal_species": "Tardigrade", "visual_search_query": "Tardigrade", "duration_est": 22.0},
-                {"scene_id": 7, "narration": "Subscribe to AW360 Animal World 360 for more epic wildlife stories!", "target_animal_species": "Harpy eagle", "visual_search_query": "Harpy eagle", "duration_est": 12.0}
-            ]
-        }
+        raise ProductionPolicyError("Unrelated canned fallback scripts are disabled.")
 
     def _generate_edge_tts_only(self, text: str) -> tuple[str, list, float]:
         import asyncio

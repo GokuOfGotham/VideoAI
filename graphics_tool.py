@@ -1,4 +1,4 @@
-"""Compile VideoAI graphics; every video render requires Epidemic music and SFX."""
+"""Compile VideoAI graphics; production renders follow the shared editorial/audio policy."""
 
 from __future__ import annotations
 
@@ -123,7 +123,7 @@ def build_parser() -> argparse.ArgumentParser:
     compile_parser.add_argument("--width", type=int)
     compile_parser.add_argument("--height", type=int)
     compile_parser.add_argument("--overwrite", action="store_true", help="Replace existing ASS/SRT outputs.")
-    render_parser = commands.add_parser("render", help="Render graphics and mix required Epidemic music/SFX with source audio.")
+    render_parser = commands.add_parser("render", help="Render a reviewed production: natural gameplay audio or supporting Epidemic scoring.")
     render_parser.add_argument("--config", required=True)
     render_parser.add_argument("--input", required=True)
     render_parser.add_argument("--output", required=True)
