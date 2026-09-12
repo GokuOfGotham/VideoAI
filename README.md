@@ -104,9 +104,9 @@ python space_media_sourcer.py --attribution    # print the credit ledger
 Sources, tried in order:
 
 1. **NASA Image and Video Library** — real MP4 footage, no API key needed.
-2. **SpaceX** — launch photography from each launch's Flickr originals, plus
-   launch webcasts, whose YouTube ids are handed to the b-roll pipeline so the
-   footage gets cut the same way.
+2. **SpaceX via Launch Library 2** — the launch photo on each past SpaceX
+   launch, plus launch webcasts, whose YouTube ids are handed to the b-roll
+   pipeline so the footage gets cut the same way.
 3. **NASA library again, broadened** — NASA's search is literal, so
    `rocket grid fins deployment steering` matches nothing while `rocket`
    matches thousands of clips. A miss retries with progressively shorter
@@ -120,12 +120,14 @@ Sources, tried in order:
 Stills get a slow Ken Burns push rather than being held static, because a
 frozen frame under narration reads as a broken video.
 
-> **SpaceX API availability.** The public instance at `api.spacexdata.com` goes
-> down for stretches at a time — it was returning Cloudflare `525` throughout
-> this feature's development. Launch data is cached to disk on first success so
-> the tier keeps working through an outage, and every call treats absence as
-> normal and falls through to NASA. Point `SPACEX_API_BASE` at a mirror if you
-> run one.
+> **SpaceX data source.** `api.spacexdata.com` was archived in June 2026 and
+> now fails TLS (Cloudflare `525`), so the tier reads [Launch Library 2](https://thespacedevs.com/llapi)
+> directly — the same upstream that API was built on. It is free without a key
+> at 15 requests an hour; the first run pages the SpaceX archive into
+> `assets/materials/space/spacex_launches.json` (resuming later if the quota
+> runs out) and after that a refresh is one request a day. Set `LL2_API_KEY`
+> for a higher limit. Every call treats absence as normal and falls through to
+> NASA.
 
 ## Licensing note
 

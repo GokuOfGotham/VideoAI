@@ -8,9 +8,10 @@ Tiers, cheapest and most permissive first:
 1. **NASA Image and Video Library** (``images-api.nasa.gov``) — real MP4 footage,
    no API key required. NASA media is generally public domain, which makes it
    the safest tier to lean on.
-2. **SpaceX** (``api.spacexdata.com``) — launch photography from the Flickr
-   originals on each launch, and launch webcasts, whose YouTube ids are handed
-   to the b-roll pipeline so the footage gets cut the same way.
+2. **SpaceX via Launch Library 2** (``ll.thespacedevs.com``) — the launch
+   photo on each past SpaceX launch, and launch webcasts, whose YouTube ids
+   are handed to the b-roll pipeline so the footage gets cut the same way.
+   No key required; 15 requests an hour without ``LL2_API_KEY``.
 3. **NASA APOD** (``api.nasa.gov``) — high-resolution astronomy stills. Uses
    ``NASA_API_KEY``; falls back to ``DEMO_KEY`` at a much lower rate limit.
 
@@ -19,16 +20,19 @@ frame under narration reads as a broken video.
 
 Licensing: NASA material is public domain with the caveats NASA publishes —
 its logos and insignia are restricted, and some library items are third-party
-content that only NASA has cleared. SpaceX has released its launch photography
-into the public domain (CC0). Every asset is still recorded in an attribution
-ledger so the provenance of anything published can be checked.
+content that only NASA has cleared. SpaceX launch photos carry whatever
+licence Launch Library 2 records for them, and an unknown one is flagged.
+Every asset is recorded in an attribution ledger so the provenance of
+anything published can be checked.
 """
 
 import argparse
 import json
+import math
 import os
 import re
 import sys
+import time
 import urllib.parse
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -59,7 +63,6 @@ LEDGER_MARKDOWN = CACHE_DIR / "ATTRIBUTION.md"
 
 NASA_SEARCH_URL = "https://images-api.nasa.gov/search"
 NASA_APOD_URL = "https://api.nasa.gov/planetary/apod"
-SPACEX_API_BASE = os.getenv("SPACEX_API_BASE", "https://api.spacexdata.com/v4")
 
 # Words that make a scene a space scene. Used by the media sourcers to decide
 # whether this tier is worth trying before the generic stock libraries.
@@ -160,7 +163,7 @@ class SpaceClip:
     """A normalised space clip plus the provenance needed to credit it."""
 
     path: str
-    source: str           # "nasa_library" | "nasa_apod" | "spacex_flickr" | "spacex_webcast"
+    source: str           # "nasa_library" | "nasa_apod" | "spacex_photo" | "spacex_webcast"
     asset_id: str
     title: str
     center: str           # NASA centre, or the SpaceX mission name
@@ -198,9 +201,9 @@ def _record(clip: SpaceClip) -> None:
         "",
         "Provenance for every NASA and SpaceX asset cached by",
         "`space_media_sourcer.py`. NASA material is public domain except for its",
-        "logos and insignia and any third-party content it hosts; SpaceX has",
-        "released its launch photography into the public domain. Check anything",
-        "flagged below before publishing.",
+        "logos and insignia and any third-party content it hosts; SpaceX launch",
+        "photos carry the licence Launch Library 2 records for them. Check",
+        "anything flagged below before publishing.",
         "",
     ]
     for name, entry in sorted(ledger.items()):
@@ -364,74 +367,222 @@ def _try_nasa_library(
     return None
 
 
-# --- SpaceX -----------------------------------------------------------------
+# --- SpaceX (via Launch Library 2) ------------------------------------------
+#
+# api.spacexdata.com was archived in June 2026 and its origin now fails the
+# TLS handshake (Cloudflare 525) on every version. It was a reshaping of
+# Launch Library 2, so this tier reads LL2 directly: past SpaceX launches,
+# each with a launch photo and webcast links. Unauthenticated access is limited
+# to 15 requests an hour, which is why launches are cached to disk and a
+# refresh costs one request.
+
+LL2_API_BASE = os.getenv("LL2_API_BASE", "https://ll.thespacedevs.com/2.3.0")
+LL2_SPACEX_AGENCY_ID = 121
+LL2_PAGE_SIZE = 100
+LAUNCH_CACHE_FILE = CACHE_DIR / "spacex_launches.json"
+_LAUNCH_CACHE_SCHEMA = 2
+
+_YOUTUBE_ID_RE = re.compile(r"(?:v=|youtu\.be/|/live/|/embed/)([A-Za-z0-9_-]{11})")
 
 
-def _spacex_get(path: str) -> Optional[object]:
-    """Calls the SpaceX API, returning None when it is unreachable.
+def _ll2_get(path: str, params: Dict) -> Optional[Dict]:
+    """Calls Launch Library 2, returning None when it cannot be used.
 
-    The public instance goes down for stretches at a time (Cloudflare 5xx), so
-    every caller treats absence as normal and falls through to another tier.
+    A 429 means the hourly quota is spent; it is treated like an outage so the
+    caller falls back to the on-disk cache.
     """
+    headers = {"User-Agent": "VideoAI/1.0"}
+    key = os.getenv("LL2_API_KEY", "").strip()
+    if key:
+        headers["Authorization"] = f"Token {key}"
     try:
         resp = requests.get(
-            f"{SPACEX_API_BASE}/{path.lstrip('/')}",
-            timeout=env_int("SPACEX_TIMEOUT", 20),
-            headers={"User-Agent": "VideoAI/1.0"},
+            f"{LL2_API_BASE.rstrip('/')}/{path.strip('/')}/",
+            params=params,
+            timeout=env_int("SPACEX_TIMEOUT", 30),
+            headers=headers,
         )
+        if resp.status_code == 429:
+            print("[SpaceMedia] Launch Library rate limit hit (15/hour without LL2_API_KEY).")
+            return None
         if resp.status_code >= 500:
-            print(f"[SpaceMedia] SpaceX API unavailable (HTTP {resp.status_code}).")
+            print(f"[SpaceMedia] Launch Library unavailable (HTTP {resp.status_code}).")
             return None
         resp.raise_for_status()
         return resp.json()
     except Exception as exc:
-        print(f"[SpaceMedia] SpaceX API unreachable ({exc}).")
+        print(f"[SpaceMedia] Launch Library unreachable ({exc}).")
         return None
 
 
+def _youtube_id(url: str) -> Optional[str]:
+    match = _YOUTUBE_ID_RE.search(url or "")
+    return match.group(1) if match else None
+
+
+def _normalise_launch(raw: Dict) -> Dict:
+    """Reduces an LL2 launch to the fields this tier needs.
+
+    Detailed LL2 records run to tens of kilobytes each; most of it (timelines,
+    pad turnaround, patches) is noise here and would bloat the cache.
+    """
+    image = raw.get("image") or {}
+    mission = raw.get("mission") or {}
+
+    # Prefer the official webcast; LL2 also lists re-streams and commentary.
+    webcast_url, youtube_id = "", ""
+    videos = sorted(
+        raw.get("vid_urls") or [],
+        key=lambda v: (
+            (v.get("type") or {}).get("name") != "Official Webcast",
+            -(v.get("priority") or 0),
+        ),
+    )
+    for video in videos:
+        vid = _youtube_id(video.get("url", ""))
+        if vid:
+            webcast_url, youtube_id = video.get("url", ""), vid
+            break
+
+    wiki = next(
+        (u.get("url") for u in raw.get("info_urls") or []
+         if "wikipedia" in ((u.get("source") or "") + (u.get("url") or "")).lower()),
+        None,
+    )
+    return {
+        "id": raw.get("id") or "",
+        "name": raw.get("name") or "",
+        "details": mission.get("description") or "",
+        "success": (raw.get("status") or {}).get("abbrev") == "Success",
+        "net": raw.get("net") or "",
+        "image_url": image.get("image_url") or "",
+        "image_credit": image.get("credit") or "",
+        "image_license": (image.get("license") or {}).get("name") or "Unknown",
+        "webcast_url": webcast_url,
+        "youtube_id": youtube_id,
+        "page_url": wiki or raw.get("url") or "",
+    }
+
+
+def _fetch_launch_page(before: Optional[str] = None) -> Optional[List[Dict]]:
+    """One page of past SpaceX launches, newest first, optionally older than `before`."""
+    params = {
+        "lsp__id": LL2_SPACEX_AGENCY_ID,
+        "mode": "detailed",
+        "limit": LL2_PAGE_SIZE,
+        "ordering": "-net",
+    }
+    if before:
+        params["net__lt"] = before
+    data = _ll2_get("launches/previous", params)
+    if not isinstance(data, dict) or not isinstance(data.get("results"), list):
+        return None
+    return [_normalise_launch(r) for r in data["results"]]
+
+
+def _load_launch_cache() -> Dict:
+    try:
+        with open(LAUNCH_CACHE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    # An api.spacexdata.com dump from before the switch has a different shape.
+    if not isinstance(data, dict) or data.get("schema") != _LAUNCH_CACHE_SCHEMA:
+        return {}
+    return data
+
+
+def _save_launch_cache(launches: List[Dict], complete: bool) -> None:
+    try:
+        with open(LAUNCH_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump({
+                "schema": _LAUNCH_CACHE_SCHEMA,
+                "fetched_at": time.time(),
+                "complete": complete,
+                "launches": launches,
+            }, f)
+    except OSError:
+        pass
+
+
+def _newest_first(launches) -> List[Dict]:
+    return sorted(launches, key=lambda l: l.get("net") or "", reverse=True)
+
+
 def _spacex_launches() -> List[Dict]:
-    """Returns all launches, preferring a cached copy over a repeat fetch."""
-    cache = CACHE_DIR / "spacex_launches.json"
+    """Past SpaceX launches, newest first, from the disk cache where possible.
+
+    The first run pages back through LL2 until it has the whole archive or the
+    hourly quota runs out, in which case the backfill resumes an hour later.
+    After that a refresh is one request for the newest page, merged in by id.
+    """
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cache = _load_launch_cache()
+    launches = {l["id"]: l for l in cache.get("launches", []) if l.get("id")}
+    complete = bool(cache.get("complete"))
+    age_hours = (time.time() - float(cache.get("fetched_at") or 0)) / 3600
 
-    data = _spacex_get("launches")
-    if isinstance(data, list) and data:
-        try:
-            with open(cache, "w", encoding="utf-8") as f:
-                json.dump(data, f)
-        except OSError:
-            pass
-        return data
+    ttl = env_float("SPACEX_CACHE_HOURS", 24) if complete else 1.0
+    if launches and age_hours < ttl:
+        return _newest_first(launches.values())
 
-    # The API is down; a previous run's copy keeps this tier working offline.
-    if cache.exists():
-        try:
-            with open(cache, "r", encoding="utf-8") as f:
-                cached = json.load(f)
-            print(f"[SpaceMedia] Using cached SpaceX launch data ({len(cached)} launches).")
-            return cached
-        except (OSError, json.JSONDecodeError):
-            pass
-    return []
+    max_pages = env_int("SPACEX_MAX_PAGES", 8)
+    fetched = 0
+
+    # The newest page doubles as the refresh and as the start of a cold fill.
+    page = _fetch_launch_page()
+    if page is not None:
+        fetched += 1
+        launches.update({l["id"]: l for l in page if l.get("id")})
+        if len(page) < LL2_PAGE_SIZE:
+            complete = True
+
+    # Backfill older launches until the archive ends or the quota does.
+    while fetched and not complete and fetched < max_pages:
+        oldest = min(l["net"] for l in launches.values() if l.get("net"))
+        page = _fetch_launch_page(before=oldest)
+        if page is None:
+            break
+        fetched += 1
+        new = {l["id"]: l for l in page if l.get("id") and l["id"] not in launches}
+        launches.update(new)
+        if len(page) < LL2_PAGE_SIZE or not new:
+            complete = True
+
+    if fetched:
+        _save_launch_cache(list(launches.values()), complete)
+        print(f"[SpaceMedia] Launch Library: {len(launches)} SpaceX launches cached"
+              + ("." if complete else " (backfill continues next run)."))
+    elif launches:
+        print(f"[SpaceMedia] Using cached SpaceX launch data ({len(launches)} launches).")
+    return _newest_first(launches.values())
 
 
 def _match_launches(launches: List[Dict], query: str) -> List[Dict]:
-    """Ranks launches by how well their name/details match the query."""
-    words = {w for w in re.findall(r"[a-z0-9]+", query.lower()) if len(w) > 2}
+    """Ranks launches by how well their name/details match the query.
+
+    Query words are weighted by how rare they are across the archive, so
+    "heavy" (a dozen launches) outranks "falcon" (nearly all of them), and a
+    hit in the launch name counts double a hit in the mission description.
+    """
+    words = {w for w in re.findall(r"[a-z0-9]+", query.lower())
+             if len(w) > 2 and w not in _STOPWORDS}
+    docs = [((l.get("name") or "").lower(), (l.get("details") or "").lower()) for l in launches]
+    weight = {}
+    for w in words:
+        hits = sum(1 for name, details in docs if w in name or w in details)
+        weight[w] = math.log(len(docs) / hits) if hits else 0.0
+
     scored = []
-    for launch in launches:
-        haystack = " ".join(filter(None, [
-            launch.get("name", ""), launch.get("details") or "",
-        ])).lower()
-        score = sum(1 for w in words if w in haystack)
-        if launch.get("success"):
-            score += 0.5
+    for launch, (name, details) in zip(launches, docs):
+        score = sum(weight[w] * (2 if w in name else 1) for w in words if w in name or w in details)
         if score > 0:
-            scored.append((score, launch))
+            scored.append((score + (0.5 if launch.get("success") else 0), launch))
 
     if not scored:
-        # No name match: fall back to recent launches that actually have media.
-        scored = [(0, l) for l in launches[-40:]]
+        # Nothing distinctive matched: fall back to the most recent launches
+        # (the list is newest first).
+        scored = [(0, l) for l in launches[:40]]
     scored.sort(key=lambda x: x[0], reverse=True)
     return [l for _, l in scored]
 
@@ -447,37 +598,46 @@ def _try_spacex(query: str, clip_length: float) -> Optional[SpaceClip]:
     # Launch photography first: a still we can cut is more reliable than a
     # webcast that may be an hour of hold-and-countdown.
     for launch in candidates[:max_checks]:
-        photos = ((launch.get("links") or {}).get("flickr") or {}).get("original") or []
-        for url in photos[:3]:
-            safe = re.sub(r"[^A-Za-z0-9_-]", "_", launch.get("name", "launch"))[:40]
-            dest = CACHE_DIR / f"spacex_{safe}_{int(clip_length)}.mp4"
-            raw = CACHE_DIR / f".raw_spacex_{safe}{Path(urllib.parse.urlparse(url).path).suffix or '.jpg'}"
+        url = launch.get("image_url")
+        if not url:
+            continue
+        safe = re.sub(r"[^A-Za-z0-9_-]", "_", launch.get("name") or "launch")[:40]
+        stem = f"spacex_{safe}_{str(launch.get('id', ''))[:8]}"
+        dest = CACHE_DIR / f"{stem}_{int(clip_length)}.mp4"
+        raw = CACHE_DIR / f".raw_{stem}{Path(urllib.parse.urlparse(url).path).suffix or '.jpg'}"
 
-            print(f"[SpaceMedia] SpaceX photo: {launch.get('name')}")
-            if not download_file(url, raw):
-                continue
-            ok = _render(raw, dest, clip_length, is_video=False)
-            raw.unlink(missing_ok=True)
-            if not ok:
-                continue
+        print(f"[SpaceMedia] SpaceX photo: {launch.get('name')}")
+        if not download_file(url, raw):
+            continue
+        ok = _render(raw, dest, clip_length, is_video=False)
+        raw.unlink(missing_ok=True)
+        if not ok:
+            continue
 
-            clip = SpaceClip(
-                path=str(dest), source="spacex_flickr",
-                asset_id=str(launch.get("id", "")),
-                title=launch.get("name", ""), center=launch.get("name", "SpaceX"),
-                page_url=(launch.get("links") or {}).get("wikipedia") or url,
-                license="Public domain (SpaceX photography, CC0)",
-                media_kind="still", duration=round(clip_length, 2),
-                query=query, requested_duration=round(clip_length, 2),
-            )
-            _record(clip)
-            print(f"[SpaceMedia] Cut {clip_length:.1f}s -> {dest.name}")
-            return clip
+        # LL2 records the licence it knows for each image; anything it does
+        # not know is flagged so it gets checked before publishing.
+        credit = launch.get("image_credit") or "SpaceX"
+        licence = launch.get("image_license") or "Unknown"
+        clip = SpaceClip(
+            path=str(dest), source="spacex_photo",
+            asset_id=str(launch.get("id", "")),
+            title=launch.get("name", ""), center=launch.get("name") or "SpaceX",
+            page_url=launch.get("page_url") or url,
+            license=(
+                f"{licence} (credit: {credit})" if licence != "Unknown"
+                else f"Unknown licence (credit: {credit}) — verify before publishing"
+            ),
+            media_kind="still", duration=round(clip_length, 2),
+            query=query, requested_duration=round(clip_length, 2),
+        )
+        _record(clip)
+        print(f"[SpaceMedia] Cut {clip_length:.1f}s -> {dest.name}")
+        return clip
 
     # Then the webcasts, cut by the b-roll pipeline.
     if os.getenv("SPACE_MEDIA_USE_WEBCASTS", "1").strip().lower() not in ("0", "false", "no"):
         for launch in candidates[:max_checks]:
-            youtube_id = (launch.get("links") or {}).get("youtube_id")
+            youtube_id = launch.get("youtube_id")
             if not youtube_id:
                 continue
             clip = _cut_webcast(launch, youtube_id, query, clip_length)
@@ -507,7 +667,7 @@ def _cut_webcast(launch: Dict, youtube_id: str, query: str, clip_length: float) 
     clip = SpaceClip(
         path=broll.path, source="spacex_webcast", asset_id=youtube_id,
         title=launch.get("name", ""), center="SpaceX",
-        page_url=(launch.get("links") or {}).get("webcast")
+        page_url=launch.get("webcast_url")
         or f"https://www.youtube.com/watch?v={youtube_id}",
         license=broll.license or "SpaceX webcast (verify before publishing)",
         media_kind="video", duration=broll.duration,
@@ -658,8 +818,10 @@ def main() -> int:
     if args.check:
         print("NASA Image and Video Library:",
               "OK" if _nasa_search("apollo", "video") else "unreachable")
-        company = _spacex_get("company")
-        print("SpaceX API:", "OK" if company else "unreachable")
+        probe = _ll2_get("launches/previous",
+                         {"lsp__id": LL2_SPACEX_AGENCY_ID, "limit": 1, "mode": "list"})
+        print("SpaceX launches (Launch Library 2):", "OK" if probe else "unreachable")
+        print("LL2_API_KEY:", "configured" if os.getenv("LL2_API_KEY") else "missing (15 requests/hour)")
         key = os.getenv("NASA_API_KEY")
         print("NASA_API_KEY:", "configured" if key else "missing (APOD limited to DEMO_KEY)")
         return 0
