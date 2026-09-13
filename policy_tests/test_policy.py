@@ -148,3 +148,46 @@ class RendererChecks(unittest.TestCase):
         self.assertNotIn('sidechaincompress',' '.join(commands[0]));self.assertIn('[0:a:0]',' '.join(commands[0]))
 
 if __name__=='__main__':unittest.main()
+
+class PoliticsModeChecks(unittest.TestCase):
+    def plan(self):
+        d=valid();r=d['production_review'];r['mode']='politics';r['fact_check']='FACT_CHECK.md: one row per claim with source and treatment.'
+        d['sources']=[{'outlet':'CBS NEWS','programme':'CBS Mornings','date':'September 10, 2026','url':'https://www.youtube.com/watch?v=3kOmty5rMN4'}]
+        d['used_ranges']=[{'export':'main','source':'cbs_dubious','source_in':95.26,'source_out':103.86,'original_audio':True,'speaker':'PRESIDENT TRUMP'},
+                          {'export':'main','source':'cbs_dubious','source_in':138.0,'source_out':146.0,'original_audio':False}]
+        return d
+    def test_valid_politics_plan_is_stamped(self):
+        out=validate_plan(self.plan(),duration=60);self.assertEqual(out['mode'],'politics')
+        self.assertIn('mode',review_template('documentary','long','politics'))
+        self.assertIn('POLITICS MODE IS ON',policy_prompt(mode='politics'))
+        self.assertNotIn('POLITICS MODE IS ON',policy_prompt())
+        self.assertTrue(any(rule.startswith('POLITICS MODE') for rule in load_policy()['rules']))
+    def test_unknown_mode_rejected(self):
+        d=self.plan();d['production_review']['mode']='sports'
+        with self.assertRaisesRegex(ProductionPolicyError,'Unknown production_review.mode'):validate_plan(d)
+        with self.assertRaises(ProductionPolicyError):review_template(mode='sports')
+    def test_requires_fact_check_sources_and_ranges(self):
+        d=self.plan();d['production_review']['fact_check']=''
+        with self.assertRaisesRegex(ProductionPolicyError,'fact_check'):validate_plan(d)
+        d=self.plan();d['sources']=[]
+        with self.assertRaisesRegex(ProductionPolicyError,'sources'):validate_plan(d)
+        d=self.plan();d['sources'][0].pop('url')
+        with self.assertRaisesRegex(ProductionPolicyError,'outlet, date and url'):validate_plan(d)
+        d=self.plan();d['used_ranges']=[]
+        with self.assertRaisesRegex(ProductionPolicyError,'used_ranges'):validate_plan(d)
+    def test_excerpt_needs_speaker_and_numeric_bounds(self):
+        d=self.plan();d['used_ranges'][0].pop('speaker')
+        with self.assertRaisesRegex(ProductionPolicyError,'needs a speaker'):validate_plan(d)
+        d=self.plan();d['used_ranges'][0]['source_out']='end'
+        with self.assertRaisesRegex(ProductionPolicyError,'numeric source_in and source_out'):validate_plan(d)
+        d=self.plan();d['used_ranges'][0]['source_out']=90.0
+        with self.assertRaisesRegex(ProductionPolicyError,'source_out <= source_in'):validate_plan(d)
+    def test_replayed_range_rejected_within_export_only(self):
+        d=self.plan();d['used_ranges'].append({'export':'main','source':'cbs_dubious','source_in':95.26,'source_out':106.0,'original_audio':False})
+        with self.assertRaisesRegex(ProductionPolicyError,'shown twice'):validate_plan(d)
+        d['used_ranges'][-1]['export']='short';validate_plan(d)
+    def test_plans_without_mode_are_unchanged(self):
+        out=validate_plan(valid(),duration=60);self.assertIsNone(out['mode'])
+
+if __name__=='__main__':
+    unittest.main()

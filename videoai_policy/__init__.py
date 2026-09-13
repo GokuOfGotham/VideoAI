@@ -19,24 +19,37 @@ def load_policy():
         raise ProductionPolicyError('Shared production policy is missing or invalid.')
     return data
 
-def review_template(content_type='documentary', video_format='short'):
-    return {'content_type': content_type, 'format': video_format, 'hook_start_seconds': 0,
-            'hook': '', 'first_payoff_seconds': None, 'first_payoff': '', 'pacing_review': '',
-            'audio_mode': 'natural_game' if content_type == 'gameplay' else 'cedar',
-            'standalone': True, 'overrides': {}}
+MODES = {'politics'}
 
-def policy_prompt(*, content_type='documentary', video_format='short', include_review=True):
+def review_template(content_type='documentary', video_format='short', mode=None):
+    review = {'content_type': content_type, 'format': video_format, 'hook_start_seconds': 0,
+              'hook': '', 'first_payoff_seconds': None, 'first_payoff': '', 'pacing_review': '',
+              'audio_mode': 'natural_game' if content_type == 'gameplay' else 'cedar',
+              'standalone': True, 'overrides': {}}
+    if mode:
+        if mode not in MODES:
+            raise ProductionPolicyError(f'Unknown mode {mode!r}; known modes: {sorted(MODES)}')
+        review['mode'] = mode
+        review['fact_check'] = ''
+    return review
+
+def policy_prompt(*, content_type='documentary', video_format='short', include_review=True, mode=None):
     p = load_policy()
     text = f"VIDEOAI SHARED PRODUCTION POLICY {p['version']}\n"
     text += '\n'.join(f'{i+1}. {rule}' for i, rule in enumerate(p['rules']))
     text += '\nThese user-approved production defaults replace conflicting legacy style instructions. Explicit user requests still take precedence.\n'
+    if mode == 'politics':
+        text += ('POLITICS MODE IS ON for this production: follow every POLITICS MODE rule above, set production_review.mode to "politics", '
+                 'list every source under "sources" (outlet, programme, date, url) and every range shown under "used_ranges" '
+                 '(source, source_in, source_out, original_audio, speaker for original audio), and point production_review.fact_check '
+                 'at the FACT_CHECK.md you will deliver.\n')
     if include_review:
         text += ('Add a top-level production_review object to the requested JSON schema. Fill every blank '
                  'with a concrete description of this edit, and set first_payoff_seconds to its actual planned '
                  'time. Do not copy placeholders. For any exception, overrides[rule_id] must contain '
                  'reason and user_request strings quoting the actual user choice; never invent authorization. '
                  'Allowed exceptions: hook, payoff, pacing, audio, standalone. Template:\n')
-        text += json.dumps(review_template(content_type, video_format), ensure_ascii=False)
+        text += json.dumps(review_template(content_type, video_format, mode), ensure_ascii=False)
     return text
 
 def _number(value, name):
@@ -84,9 +97,51 @@ def validate_plan(data, *, duration=None):
     for segment in data.get('shots', data.get('scenes', [])):
         if isinstance(segment, dict) and segment.get('role') in {'loading','redundant_travel','empty_pause'}:
             require(_text(segment.get('editorial_reason')), 'Remove downtime or document why this particular moment serves the story.', 'pacing')
-    return {'policy_version': p['version'], 'status': 'plan_checked',
+    mode = review.get('mode')
+    if mode is not None and mode not in MODES:
+        raise ProductionPolicyError(f'Unknown production_review.mode {mode!r}; known modes: {sorted(MODES)}')
+    if mode == 'politics':
+        _check_politics(data, review)
+    return {'policy_version': p['version'], 'status': 'plan_checked', 'mode': mode,
             'limitations': 'Checks declared timings, text and editorial descriptions; does not establish actual footage quality or audience performance.',
             'overrides': copy.deepcopy(overrides)}
+
+
+def _check_politics(data, review):
+    """Politics mode: named sources, verified excerpt ranges, one showing per range,
+    a named or event-attributed speaker on every original-audio excerpt, and a fact-check
+    record. These are declarations; the excerpts and captions still have to be inspected."""
+    if not _text(review.get('fact_check')):
+        raise ProductionPolicyError('Politics mode needs production_review.fact_check naming the FACT_CHECK.md (one row per claim with source and treatment).')
+    sources = data.get('sources')
+    if not isinstance(sources, (list, dict)) or not sources:
+        raise ProductionPolicyError('Politics mode needs a non-empty "sources" list: outlet, programme, date and url for every source used.')
+    items = list(sources.values()) if isinstance(sources, dict) else sources
+    for item in items:
+        if not isinstance(item, dict) or not str(item.get('outlet', '')).strip() or not _text(str(item.get('url', ''))) or not item.get('date'):
+            raise ProductionPolicyError('Every source needs outlet, date and url.')
+    ranges = data.get('used_ranges')
+    if ranges is None:
+        ranges = [s for s in data.get('shots', []) if isinstance(s, dict) and s.get('source')]
+    if not isinstance(ranges, list) or not ranges:
+        raise ProductionPolicyError('Politics mode needs "used_ranges" (or shots with a source): source, source_in, source_out, original_audio, speaker.')
+    seen = []
+    for r in ranges:
+        if not isinstance(r, dict) or not r.get('source'):
+            raise ProductionPolicyError('Each used range needs a source name.')
+        try:
+            a = _number(r.get('source_in'), 'source_in'); b = _number(r.get('source_out'), 'source_out')
+        except ProductionPolicyError:
+            raise ProductionPolicyError(f'Range from {r["source"]!r} needs numeric source_in and source_out (verified word boundaries for excerpts).') from None
+        if b <= a:
+            raise ProductionPolicyError(f'Range from {r["source"]!r} has source_out <= source_in.')
+        if (r.get('original_audio') or r.get('sound')) and not _text(str(r.get('speaker', ''))):
+            raise ProductionPolicyError(f'Original-audio excerpt from {r["source"]!r} at {a} needs a speaker (or the event it was recorded at).')
+        export = r.get('export', '')
+        for (src, a2, b2, ex2) in seen:
+            if src == r['source'] and ex2 == export and a < b2 - 0.05 and a2 < b - 0.05:
+                raise ProductionPolicyError(f'Source range shown twice: {src!r} {a2}-{b2} and {a}-{b}. Never replay footage within an export.')
+        seen.append((r['source'], a, b, export))
 
 def validate_script(data, *, duration=None):
     result = validate_plan(data, duration=duration)

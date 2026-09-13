@@ -8,6 +8,8 @@ Every production needs a concrete `production_review` in its script/config: imme
 
 Gameplay highlights default to original game audio. Narrated documentaries and lore use the approved Cedar preset below. Treat analytics percentages as benchmarks, never algorithmic guarantees; do not diagnose a six-view sample as proof of clickbait or a precise retention cliff. An explicit user request can override a default; record the existing request without asking again. Do not fabricate exceptions or silently substitute another voice or an unrelated canned script after an API failure.
 
+For civic, election and policy explainers, use **politics mode** (`production_review.mode = "politics"`, the POLITICS MODE rules in the policy and the Politics mode section of PRODUCTION_RULES.md): broadcast footage from named outlets, verified word-boundary excerpts with speakers on screen, no replayed ranges, captions re-timed from the audio, a fact-check table and a source manifest. `python policy_tool.py prompt --mode politics` briefs any other model. Reference build: `create_5000_promise_v2.py`.
+
 For gaming work, apply the canonical GAMING rules and the Gaming content section of PRODUCTION_RULES.md before choosing the format. Record the viewer question/objective, evidence and format in the production review; distinguish narrated essays and guides from original-audio highlights. Honor explicit user format choices.
 
 ## Default narration — user approved

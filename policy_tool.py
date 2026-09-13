@@ -10,10 +10,11 @@ def main():
     p.add_argument('file',nargs='?');p.add_argument('--format',choices=['long','short'],default='short')
     p.add_argument('--content-type',choices=['gameplay','documentary','lore','other'],default='documentary')
     p.add_argument('--duration',type=float)
+    p.add_argument('--mode',choices=['politics'],help='production mode; politics = broadcast-sourced civic explainer with verified, attributed excerpts')
     a=p.parse_args()
     try:
-        if a.action=='prompt': print(policy_prompt(content_type=a.content_type,video_format=a.format))
-        elif a.action=='template':print(json.dumps({'production_review':review_template(a.content_type,a.format)},indent=2))
+        if a.action=='prompt': print(policy_prompt(content_type=a.content_type,video_format=a.format,mode=a.mode))
+        elif a.action=='template':print(json.dumps({'production_review':review_template(a.content_type,a.format,a.mode)},indent=2))
         else:
             if not a.file:p.error('check requires a JSON script/config file')
             data=json.loads(Path(a.file).read_text(encoding='utf-8-sig'))
