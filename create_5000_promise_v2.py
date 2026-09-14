@@ -61,6 +61,12 @@ NAMES = {"main": "The_5000_Promise_Critics_Case_1080p.mp4", "short": "The_5000_P
 TITLE = "THE $5,000 PROMISE: THE CRITICS' CASE"
 CUTOFF = "September 12, 2026"
 
+THEME = "broadcast"  # "classic" = the first Civic Context look; "broadcast" = NBC / MS NOW style bars and cards
+# Broadcast palette: navy ground, royal-blue and red tabs, white bars, near-black type.
+B_BG = "#0B1730"; B_BG2 = "#08122A"; B_BLUE = "#1B4ED8"; B_BLUE2 = "#2F6BFF"; B_RED = "#D62828"
+B_WHITE = "#FFFFFF"; B_CARD = "#F5F7FB"; B_INK = "#101418"; B_NAVY = "#0F2452"; B_GRAY = "#5B6B85"; B_MUTE = "#9FB0CC"; B_EDGE = "#3A4B6E"
+FONTS = {"cond": "C:/Windows/Fonts/RobotoCondensed-Bold.ttf", "bold": "C:/Windows/Fonts/Roboto-Bold.ttf", "reg": "C:/Windows/Fonts/Roboto-Regular.ttf",
+         "black": "C:/Windows/Fonts/Roboto-Black.ttf", "num": "C:/Windows/Fonts/bahnschrift.ttf"}
 BG = "#080F19"; PANEL = "#111F2E"; ROW = "#1A2D3E"; WHITE = "#F4F3EE"; MUTED = "#AAB7C5"
 CYAN = "#66D3E5"; RED = "#EF625D"; GOLD = "#EFCE86"; RULE = "#384657"
 
@@ -70,7 +76,7 @@ SOURCES = {
     "cnn": ("CNN", "CNN NewsNight / CNN This Morning", "September 11, 2026"),
     "msnow_desperation": ("MS NOW", "All In with Chris Hayes", "September 11, 2026"),
     "msnow_lawrence": ("MS NOW", "The Last Word with Lawrence O'Donnell", "September 11, 2026"),
-    "msnow_oversight": ("MS NOW", "MS NOW", "September 10, 2026"),
+    "msnow_oversight": ("MS NOW", "On the Line with Alicia Menendez", "September 10, 2026"),
     "msnow_floats": ("MS NOW", "MS NOW", "September 10, 2026"),
     "nbc_legal": ("NBC NEWS", "NBC News NOW", "September 10, 2026"),
     "nbc_lutnick": ("NBC NEWS", "NBC News NOW", "September 11, 2026"),
@@ -829,11 +835,170 @@ def encoder_args():
 ENC = None
 
 
+def bfont(kind, size):
+    f = ImageFont.truetype(FONTS[kind], round(size))
+    if kind == "num":
+        try:
+            f.set_variation_by_name("Bold Condensed")
+        except Exception:
+            pass
+    return f
+
+
+def btext(d, text, x, y, kind, size, maxw, color=B_WHITE, align="left", line=1.18, upper=False):
+    """Word-wrapped text in a broadcast font; returns the y after the last line."""
+    f = bfont(kind, size); text = text.upper() if upper else text; lines = []
+    for para in text.split("\n"):
+        cur = ""
+        for word in para.split():
+            test = (cur + " " + word).strip()
+            if d.textlength(test, font=f) > maxw and cur:
+                lines.append(cur); cur = word
+            else:
+                cur = test
+        lines.append(cur)
+    for ln in lines:
+        w = d.textlength(ln, font=f)
+        xx = x if align == "left" else (x - w if align == "right" else x - w / 2)
+        d.text((xx, y), ln, font=f, fill=color); y += size * line
+    return y
+
+
+def tab(d, x, y, text, kind, size, fill, color, padx=14, h=None, upper=True):
+    """Solid tab with text; returns its right edge."""
+    f = bfont(kind, size); t = text.upper() if upper else text; w = d.textlength(t, font=f)
+    h = h or round(size * 1.6)
+    d.rectangle((x, y, x + w + 2 * padx, y + h), fill=fill)
+    d.text((x + padx, y + (h - size) / 2 - size * 0.12), t, font=f, fill=color)
+    return x + w + 2 * padx
+
+
+def chyron_line(s):
+    """The white-bar headline for a shot that is not an excerpt: kicker + big line."""
+    kicker, big, _, _ = CARDS[s["card"]]
+    big = big.replace("\"", "")
+    return f"{kicker}: {big}" if len(kicker) + len(big) < 44 else big
+
+
+# Broadcast layout (1920x1080): panel 1408x792 at (56,96); chyron zone 904-1024; strap 1040-1072.
+BL = dict(px=56, py=96, pw=1408, ph=792, sx=1496, sy=96, sw=368, sh=928, tab_y=904, bar_y=952, bar_h=72, strap_y=1040)
+# Short (1080x1920): panel 1080x608 at (0,380); tabs 1004; bar 1052-1144; card 1184-1500.
+BS = dict(px=0, py=380, pw=1080, ph=608, tab_y=1004, bar_y=1052, bar_h=92, card_y=1184, card_h=316)
+
+
+def plate_broadcast(kind, s):
+    vert = kind == "short"; W, H = (1080, 1920) if vert else (1920, 1080)
+    im = Image.new("RGB", (W, H), B_BG); d = ImageDraw.Draw(im)
+    # ground: navy with a darker lower band
+    d.rectangle((0, 0, W, H), fill=B_BG); d.rectangle((0, H * 0.72, W, H), fill=B_BG2); d.rectangle((0, 0, W, 4), fill=B_BLUE2)
+    if s["clip"]:
+        c = CLIPS[s["clip"]]; kicker, big, bullets, credit = c["who"], c["big"], c["lines"], SOURCES[c["src"]][1]
+    else:
+        kicker, big, bullets, credit = CARDS[s["card"]]
+    L = BS if vert else BL
+    px, py, pw, ph = L["px"], L["py"], L["pw"], L["ph"]
+    if not vert:
+        # top band: wordmark block, chapter tag, series title
+        x = tab(d, 56, 26, "CIVIC CONTEXT", "cond", 26, B_WHITE, B_NAVY, h=44)
+        x = tab(d, x + 12, 26, f"{s['section']+1:02} / {len(SECTIONS):02}", "cond", 22, B_BLUE, B_WHITE, h=44)
+        btext(d, SECTIONS[s["section"]][0], x + 14, 30, "cond", 30, 700, B_WHITE, upper=True)
+        btext(d, TITLE, 1864, 34, "cond", 24, 700, B_MUTE, align="right", upper=True)
+        # sidebar card
+        sx, sy, sw, sh = L["sx"], L["sy"], L["sw"], L["sh"]
+        d.rectangle((sx, sy, sx + sw, sy + sh), fill=B_CARD)
+        d.rectangle((sx, sy, sx + sw, sy + 46), fill=B_BLUE if not s["clip"] else B_RED)
+        ksize = 22
+        while ksize > 14 and d.textlength(kicker.upper(), font=bfont("cond", ksize)) > sw - 36:
+            ksize -= 1
+        btext(d, kicker, sx + 18, sy + 23 - ksize * 0.62, "cond", ksize, sw - 36, B_WHITE, upper=True)
+        end = btext(d, big, sx + 18, sy + 64, "cond", 44 if len(big) < 16 else (34 if len(big) < 24 else 28), sw - 36, B_NAVY, upper=True, line=1.05)
+        d.rectangle((sx + 18, end + 14, sx + sw - 18, end + 16), fill="#D6DCE8"); end += 36
+        for n, b in enumerate(bullets):
+            btext(d, f"{n+1:02}", sx + 18, end + 2, "cond", 18, 40, B_BLUE2)
+            end = btext(d, b, sx + 52, end, "reg", 21, sw - 70, B_INK, line=1.22) + 12
+        fy = sy + sh - 96
+        d.rectangle((sx + 18, fy - 14, sx + sw - 18, fy - 12), fill="#D6DCE8")
+        btext(d, "SOURCE ON SCREEN" if s["source"] else "SOURCE RECORD", sx + 18, fy, "bold", 13, sw - 36, B_GRAY, upper=True)
+        yy = fy + 20
+        for ln in (source_lines(s) if s["source"] else [credit]):
+            yy = btext(d, ln, sx + 18, yy, "reg", 16, sw - 36, B_GRAY, line=1.25)
+        # chyron zone: name/label tabs + white headline bar
+        ty, by, bh = L["tab_y"], L["bar_y"], L["bar_h"]
+        if s["clip"]:
+            x = tab(d, px, ty, c["who"], "cond", 24, B_NAVY, B_WHITE, h=44)
+            tab(d, x, ty, credit + "  ·  " + SOURCES[c["src"]][2], "bold", 18, B_WHITE, B_NAVY, h=44, upper=False)
+            f = bfont("cond", 22); w = d.textlength("ORIGINAL AUDIO", font=f)
+            tab(d, px + pw - w - 28, ty, "ORIGINAL AUDIO", "cond", 22, B_RED, B_WHITE, h=44)
+        elif s["source"]:
+            o, show, date = SOURCES[s["source"]]
+            x = tab(d, px, ty, "SOURCE FOOTAGE · MUTED", "cond", 24, B_BLUE, B_WHITE, h=44)
+            tab(d, x, ty, f"{o}  ·  {show}  ·  {date}", "bold", 18, B_WHITE, B_NAVY, h=44, upper=False)
+        else:
+            x = tab(d, px, ty, "CIVIC CONTEXT GRAPHIC", "cond", 24, B_BLUE, B_WHITE, h=44)
+            tab(d, x, ty, credit, "bold", 18, B_WHITE, B_NAVY, h=44, upper=False)
+        d.rectangle((px, by, px + pw, by + bh), fill=B_WHITE)
+        if not s["clip"]:
+            btext(d, chyron_line(s), px + 24, by + 16, "cond", 38, pw - 48, B_INK, upper=True)
+        # strap
+        d.rectangle((0, L["strap_y"], W, L["strap_y"] + 32), fill="#060D1F")
+        btext(d, "REPORTED FACTS  /  ATTRIBUTED CLAIMS  /  OPEN QUESTIONS", 56, L["strap_y"] + 8, "bold", 15, 1200, B_MUTE, upper=True)
+        btext(d, "Research cutoff " + CUTOFF, 1864, L["strap_y"] + 8, "bold", 15, 600, B_MUTE, align="right", upper=True)
+    else:
+        x = tab(d, 56, 96, "CIVIC CONTEXT", "cond", 30, B_WHITE, B_NAVY, h=52)
+        btext(d, TITLE, 56, 172, "cond", 24, 960, B_MUTE, upper=True)
+        btext(d, kicker, 56, 222, "cond", 26, 960, B_BLUE2, upper=True)
+        btext(d, big, 56, 262, "cond", 64 if len(big) < 16 else (50 if len(big) < 24 else 40), 960, B_WHITE, upper=True, line=1.02)
+        ty, by, bh = L["tab_y"], L["bar_y"], L["bar_h"]
+        if s["clip"]:
+            x = tab(d, 0, ty, c["who"], "cond", 24, B_NAVY, B_WHITE, h=44)
+            tab(d, x, ty, SOURCES[c["src"]][0], "bold", 18, B_WHITE, B_NAVY, h=44, upper=False)
+            f = bfont("cond", 22); w = d.textlength("ORIGINAL AUDIO", font=f)
+            tab(d, W - w - 28, ty, "ORIGINAL AUDIO", "cond", 22, B_RED, B_WHITE, h=44)
+        elif s["source"]:
+            o, show, date = SOURCES[s["source"]]
+            x = tab(d, 0, ty, "SOURCE FOOTAGE · MUTED", "cond", 24, B_BLUE, B_WHITE, h=44)
+            tab(d, x, ty, f"{o}  ·  {date}", "bold", 18, B_WHITE, B_NAVY, h=44, upper=False)
+        else:
+            x = tab(d, 0, ty, "CIVIC CONTEXT GRAPHIC", "cond", 24, B_BLUE, B_WHITE, h=44)
+        d.rectangle((0, by, W, by + bh), fill=B_WHITE)  # narration captions are burned into this bar
+        cy, ch = L["card_y"], L["card_h"]
+        d.rectangle((56, cy, 900, cy + ch), fill=B_CARD); d.rectangle((56, cy, 900, cy + 40), fill=B_BLUE)
+        btext(d, kicker, 72, cy + 8, "cond", 20, 800, B_WHITE, upper=True)
+        end = cy + 60
+        for n, b in enumerate(bullets[:3]):
+            btext(d, f"{n+1:02}", 72, end + 2, "cond", 18, 40, B_BLUE2)
+            end = btext(d, b, 108, end, "reg", 24, 770, B_INK, line=1.2) + 12
+        d.rectangle((0, 1560, W, 1596), fill="#060D1F")
+        btext(d, "REPORTED FACTS  /  ATTRIBUTED CLAIMS  /  OPEN QUESTIONS", 56, 1569, "bold", 15, 960, B_MUTE, upper=True)
+    # footage panel frame or full-panel graphic
+    if s["source"]:
+        d.rectangle((px - 2, py - 2, px + pw + 2, py + ph + 2), outline=B_EDGE, width=2)
+    else:
+        d.rectangle((px, py, px + pw, py + ph), fill="#0E1E44")
+        d.rectangle((px, py, px + pw, py + 6), fill=B_BLUE2)
+        card = s["card"]
+        if card in EXHIBITS:
+            top, big2, note, frac = EXHIBITS[card]
+            btext(d, top, px + pw * .06, py + ph * .14, "cond", 30 if vert else 34, pw * .88, B_BLUE2, upper=True)
+            btext(d, big2, px + pw * .06, py + ph * .30, "num", 120 if vert else 176, pw * .88, B_WHITE, upper=True, line=1.0)
+            d.rectangle((px + pw * .06, py + ph * .74, px + pw * .94, py + ph * .765), fill="#24355E"); d.rectangle((px + pw * .06, py + ph * .74, px + pw * (.06 + .88 * frac), py + ph * .765), fill=B_BLUE2)
+            btext(d, note, px + pw * .06, py + ph * .83, "bold", 18 if vert else 22, pw * .88, B_MUTE, upper=True)
+        else:
+            btext(d, kicker, px + pw * .05, py + ph * .09, "cond", 30 if vert else 34, pw * .9, B_BLUE2, upper=True)
+            rows = bullets; start = py + ph * .24; rowh = ph * .66 / max(len(rows), 3)
+            for n, b in enumerate(rows):
+                d.rectangle((px + pw * .05, start + n * rowh, px + pw * .95, start + (n + 1) * rowh - 14), fill=B_WHITE)
+                btext(d, f"{n+1:02}", px + pw * .075, start + n * rowh + 14, "cond", 26 if vert else 30, pw * .08, B_BLUE2)
+                btext(d, b, px + pw * .15, start + n * rowh + 12, "cond", 30 if vert else 40, pw * .77, B_INK, upper=True)
+    out = PLATES / f"{kind}_{s['index']:03}.png"; im.save(out)
+    return out, (px, py, pw, ph)
+
+
 def render_shot(kind, s):
     global ENC
     if ENC is None:
         ENC = encoder_args()
-    platepath, (x, y, sw, sh) = plate(kind, s); dest = SHOTS / f"{kind}_{s['index']:03}.mp4"
+    platepath, (x, y, sw, sh) = (plate_broadcast if THEME == "broadcast" else plate)(kind, s); dest = SHOTS / f"{kind}_{s['index']:03}.mp4"
     if dest.exists():
         n = json.loads(run([FP, "-v", "error", "-select_streams", "v:0", "-count_frames", "-show_entries", "stream=nb_read_frames", "-of", "json", dest]))
         if int(n["streams"][0].get("nb_read_frames", 0)) == s["frames"]:
@@ -992,25 +1157,43 @@ def excerpt_cues(shot, words, limit=64):
 
 def write_captions(kind, data):
     vert = kind == "short"; W, H = (1080, 1920) if vert else (1920, 1080)
-    header = ("[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n"
-              "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
-              "Style: Quote,Arial,%d,&H00EEF3F4,&H0066D3E5,&H00080F19,&H80080F19,-1,0,0,0,100,100,0,0,1,2.2,0,2,40,40,40,1\n"
-              "Style: Narr,Arial,%d,&H00F4F3EE,&H0066D3E5,&H00080F19,&H80080F19,-1,0,0,0,100,100,0,0,1,2.4,0,2,60,60,40,1\n\n"
-              "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n") % (W, H, 34 if not vert else 42, 44)
+    if THEME == "broadcast":
+        # Quote/narration text sits inside the white bar: near-black condensed-friendly type, no outline.
+        header = ("[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n"
+                  "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
+                  "Style: Quote,Roboto,%d,&H00181410,&H001B4ED8,&H00FFFFFF,&H00FFFFFF,-1,0,0,0,100,100,0,0,1,0,0,7,80,480,0,1\n"
+                  "Style: Narr,Roboto,%d,&H00181410,&H001B4ED8,&H00FFFFFF,&H00FFFFFF,-1,0,0,0,100,100,0,0,1,0,0,7,28,150,0,1\n\n"
+                  "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n") % (W, H, 30, 36)
+    else:
+        header = ("[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n"
+                  "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
+                  "Style: Quote,Arial,%d,&H00EEF3F4,&H0066D3E5,&H00080F19,&H80080F19,-1,0,0,0,100,100,0,0,1,2.2,0,2,40,40,40,1\n"
+                  "Style: Narr,Arial,%d,&H00F4F3EE,&H0066D3E5,&H00080F19,&H80080F19,-1,0,0,0,100,100,0,0,1,2.4,0,2,60,60,40,1\n\n"
+                  "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n") % (W, H, 34 if not vert else 42, 44)
     ev = []
     # progress bar under the footage panel for each shot
     for s in data["shots"]:
         a = s["start"]; b = a + s["duration"]
-        if vert:
-            x, y, w = 0, 1008, 1080
+        if THEME == "broadcast":
+            x, y, w = (0, 988, 1080) if vert else (56, 888, 1408); color = "FF6B2F"  # BGR of royal blue
         else:
-            x, y, w = 48, 870, 1280
-        ev.append(f"Dialogue: 5,{stamp(a)},{stamp(b)},Quote,,0,0,0,,{{\\an7\\pos({x},{y})\\p1\\bord0\\shad0\\1c&H66D3E5&\\clip({x},{y},{x},{y+4})\\t(0,{round((b-a)*1000)},\\clip({x},{y},{x+w},{y+4}))}}m 0 0 l {w} 0 {w} 4 0 4{{\\p0}}")
+            x, y, w = (0, 1008, 1080) if vert else (48, 870, 1280); color = "66D3E5"
+        ev.append(f"Dialogue: 5,{stamp(a)},{stamp(b)},Quote,,0,0,0,,{{\\an7\\pos({x},{y})\\p1\\bord0\\shad0\\1c&H{color}&\\clip({x},{y},{x},{y+4})\\t(0,{round((b-a)*1000)},\\clip({x},{y},{x+w},{y+4}))}}m 0 0 l {w} 0 {w} 4 0 4{{\\p0}}")
     # Cue boundaries are snapped to real speech onsets/offsets in the voice master
     # (the transcriber's word times drift by up to half a second at phrase edges).
     words = data["words"]
     env, step = speech_envelope(OUT / f"{kind}_voice_master_48k24.wav")
-    if not vert:
+    if THEME == "broadcast":
+        qpos = "{\\an4\\pos(80,988)\\q0}" if not vert else "{\\an4\\pos(28,1098)\\q0}"
+        if not vert:
+            for s in data["shots"]:
+                if s["sound"] and s["own_caption"]:
+                    for a, b, text, unit in snap_cues(excerpt_cues(s, words, 88), env, step):
+                        ev.append(f"Dialogue: 9,{stamp(a)},{stamp(b)},Quote,,0,0,0,,{qpos}{ass_escape(display(text))}")
+        else:
+            for a, b, text, unit in snap_cues(group_words(words, 6, 44), env, step):
+                ev.append(f"Dialogue: 9,{stamp(a)},{stamp(b)},Narr,,0,0,0,,{qpos}{ass_escape(display(text))}")
+    elif not vert:
         for s in data["shots"]:
             if s["sound"] and s["own_caption"]:
                 for a, b, text, unit in snap_cues(excerpt_cues(s, words), env, step):
@@ -1200,39 +1383,42 @@ The videos have not been uploaded. Attribution does not imply broadcaster endors
 
 
 def make_covers():
-    """Thumbnails with a readable headline; the footage is a real export frame."""
+    """Thumbnails in the broadcast look: real export frame, white headline block, blue/red tabs."""
     main = json.loads((WORK / "main_timeline.json").read_text(encoding="utf-8"))
     shot = next(s for s in main["shots"] if s["clip"] == "trump_promise")
     frame = QA / "cover_src.png"
     run([FF, "-v", "error", "-y", "-ss", shot["seek"] + 4.0, "-i", RAW / (shot["source"] + ".mp4"), "-frames:v", 1, frame])
     src = Image.open(frame).convert("RGB")
-    # Main cover 1280x720: footage on the left 62%, headline block on the right.
-    im = Image.new("RGB", (1280, 720), BG); d = ImageDraw.Draw(im)
-    crop = src.crop((520, 0, 1335, 734)).resize((800, 720))  # chyron-free region, aspect kept
-    im.paste(crop, (0, 0)); d.rectangle((790, 0, 1280, 720), fill=BG); d.rectangle((790, 0, 796, 720), fill=CYAN)
-    draw_text(d, "CIVIC CONTEXT", 830, 40, 22, 420, CYAN, True)
-    draw_text(d, "$5,000", 830, 110, 118, 420, GOLD, True)
-    draw_text(d, "IF THE GOP WINS?", 830, 250, 44, 420, WHITE, True)
-    draw_text(d, "THE CRITICS'\nCASE", 830, 330, 62, 420, WHITE, True, line=1.05)
-    draw_text(d, "CNN · MS NOW · NBC · CBS · PBS", 830, 520, 22, 430, MUTED, True)
-    draw_text(d, "$1.3 TRILLION  ·  TARIFFS  ·  CONGRESS  ·  \"BRIBE\"", 830, 560, 18, 430, CYAN)
-    d.rectangle((0, 0, 1280, 8), fill=RED); im.save(OUT / "Cover_Main.jpg", quality=92)
+    # Main cover 1280x720
+    im = Image.new("RGB", (1280, 720), B_BG); d = ImageDraw.Draw(im)
+    crop = src.crop((520, 0, 1335, 734)).resize((800, 720)); im.paste(crop, (0, 0))
+    d.rectangle((790, 0, 1280, 720), fill=B_BG); d.rectangle((790, 0, 796, 720), fill=B_BLUE2); d.rectangle((0, 0, 1280, 6), fill=B_BLUE2)
+    tab(d, 826, 36, "CIVIC CONTEXT", "cond", 24, B_WHITE, B_NAVY, h=42)
+    btext(d, "$5,000", 826, 108, "num", 150, 430, B_WHITE, upper=True, line=1.0)
+    d.rectangle((826, 270, 1244, 336), fill=B_WHITE); btext(d, "IF THE GOP WINS?", 842, 282, "cond", 44, 400, B_INK, upper=True)
+    btext(d, "THE CRITICS'\nCASE", 826, 362, "cond", 78, 430, B_WHITE, upper=True, line=0.98)
+    tab(d, 826, 560, "CNN · MS NOW · NBC · CBS · PBS", "cond", 22, B_BLUE, B_WHITE, h=40)
+    btext(d, "$1.3 TRILLION · TARIFFS · CONGRESS · \"BRIBE\"", 826, 620, "bold", 18, 440, B_MUTE, upper=True)
+    im.save(OUT / "Cover_Main.jpg", quality=92)
     # Short cover 1080x1920
-    im = Image.new("RGB", (1080, 1920), BG); d = ImageDraw.Draw(im)
-    crop = src.crop((530, 0, 1382, 734)).resize((1080, 930)); im.paste(crop, (0, 420))
-    d.rectangle((0, 0, 1080, 8), fill=RED)
-    draw_text(d, "CIVIC CONTEXT", 58, 80, 30, 950, CYAN, True)
-    draw_text(d, "$5,000", 58, 150, 150, 950, GOLD, True)
-    draw_text(d, "IF THE GOP WINS?", 58, 320, 54, 950, WHITE, True)
-    draw_text(d, "THE CRITICS' CASE", 58, 1390, 72, 950, WHITE, True)
-    draw_text(d, "CNN · MS NOW · NBC · CBS · PBS", 58, 1500, 28, 950, MUTED, True)
+    im = Image.new("RGB", (1080, 1920), B_BG); d = ImageDraw.Draw(im)
+    crop = src.crop((530, 0, 1382, 734)).resize((1080, 930)); im.paste(crop, (0, 420)); d.rectangle((0, 0, 1080, 6), fill=B_BLUE2)
+    tab(d, 56, 80, "CIVIC CONTEXT", "cond", 30, B_WHITE, B_NAVY, h=52)
+    btext(d, "$5,000", 56, 150, "num", 190, 960, B_WHITE, upper=True, line=1.0)
+    d.rectangle((0, 1350, 1080, 1440), fill=B_WHITE); btext(d, "IF THE GOP WINS?", 56, 1362, "cond", 60, 960, B_INK, upper=True)
+    btext(d, "THE CRITICS' CASE", 56, 1470, "cond", 84, 960, B_WHITE, upper=True)
+    tab(d, 56, 1590, "CNN · MS NOW · NBC · CBS · PBS", "cond", 26, B_BLUE, B_WHITE, h=48)
     im.save(OUT / "Cover_Short.jpg", quality=92)
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("stage", choices=["narrate", "plan", "render", "music", "qa", "package"]); ap.add_argument("kind", nargs="?", choices=["main", "short"])
     ap.add_argument("--music", action="store_true", help="mux the music master if it exists")
+    ap.add_argument("--theme", choices=["broadcast", "classic"], default=THEME)
     args = ap.parse_args()
+    THEME = args.theme
+    SHOTS = WORK / ("shots_broadcast" if THEME == "broadcast" else "shots"); SHOTS.mkdir(exist_ok=True)
+    PLATES = WORK / ("plates_broadcast" if THEME == "broadcast" else "plates"); PLATES.mkdir(exist_ok=True)
     if args.stage == "narrate":
         stage_narrate()
     elif args.stage == "plan":
