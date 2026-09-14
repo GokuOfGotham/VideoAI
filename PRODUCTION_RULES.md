@@ -73,3 +73,22 @@ python policy_tool.py prompt --mode politics --format long      # brief another 
 python policy_tool.py template --mode politics --format long    # review skeleton with mode + fact_check
 python policy_tool.py check output/<video>/main_production_plan.json --duration <seconds>
 ```
+
+## House graphics
+
+Every production, whatever the subject, draws its graphics with [videoai_graphics/broadcast.py](videoai_graphics/broadcast.py) - the "broadcast" system the user approved on 2026-09-13 ("crisp and beautiful graphics... gaming, political, science, sports doesn't matter"). It is one layout, one type system and one set of components; `Theme(subject=...)` only changes the accent colours (`politics`, `science`, `gaming`, `sports`, `default`) and the labels.
+
+- Main 1920x1080: boxed footage panel with its own on-screen graphics intact; a tab row under it (speaker tab + programme/date tab + ORIGINAL AUDIO tab on excerpts, or SOURCE FOOTAGE - MUTED + outlet/programme/date on B-roll); a white headline bar that carries the quote text on excerpts and the chapter headline otherwise; a white sidebar card with a coloured header, big line, numbered bullets and the source block; a top band with the channel wordmark, chapter tag and series title; a footer strap.
+- Short 1080x1920: the same components stacked, with the white bar carrying burned narration captions and the card kept clear of the Shorts UI.
+- Full-screen figures: big condensed white numbers on the dark panel with a progress rule; list graphics as white rows.
+- Type: Roboto Condensed Bold for chyrons and tabs, Roboto for body, Bahnschrift Bold Condensed for numbers (Arial Narrow / Impact fallbacks).
+- Captions: `ass_header` and `caption_tag` put quote and narration text inside the white bar; word timing is re-derived from the audio (see Politics mode).
+- Thumbnails: `cover()` - a real frame plus a headline block in the same system.
+
+Crisp means: export at the sources' native resolution and never upscale, keep every element inside the safe areas, verify text legibility on a full-resolution frame, and check the footage regions against source frames after encoding. Reference build: `create_5000_promise_v2.py` (`--theme broadcast`, the default). Preview the system for all subjects with:
+
+```powershell
+python -m videoai_graphics.broadcast --demo output\graphics_broadcast_demo
+```
+
+Do not invent a per-video look. If a production needs something the system lacks, add it to the module so every later video gets it.
