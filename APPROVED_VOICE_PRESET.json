@@ -1,0 +1,19 @@
+{
+  "provider": "openai",
+  "model": "gpt-4o-mini-tts",
+  "voice": "cedar",
+  "speed": 1.0,
+  "instructions": "Clear, confident American English storytelling in a natural medium register. Sound alert, articulate, and genuinely interested, like an excellent comics presenter talking to a friend. Crisp consonants, clean sentence endings, varied conversational intonation. No whispering, gravelly growling, exaggerated bass, vocal fry, slurring, or drawn-out vowels. No theatrical trailer announcer voice. Read every word exactly. Short natural pauses, not long dramatic pauses.",
+  "pacing": {
+    "preserve_phrases": true,
+    "pad_only_at_punctuation": true,
+    "max_padded_sentence_gap_seconds": 1.05,
+    "max_padded_clause_gap_seconds": 0.55,
+    "post_production_time_stretch": false,
+    "pitch_shift": false,
+    "prefer_rewriting_or_regenerating_to_fit": true
+  },
+  "mastering_filter": "highpass=f=70,loudnorm=I=-16:TP=-2:LRA=9",
+  "approved_reference": "output/Batman_vs_Predator_Part_1_20260911/Voice_V3",
+  "approved_date": "2026-09-11"
+}

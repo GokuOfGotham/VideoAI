@@ -1,5 +1,7 @@
 VideoAI graphics tools — mandatory Epidemic audio
 
+**House look (2026-09-13):** the plates, chyrons, sidebar cards, exhibits and thumbnails for every production come from `videoai_graphics/broadcast.py` (House graphics section of PRODUCTION_RULES.md); the overlay presets below remain for animated lower thirds, tickers and the Epidemic soundtrack.
+
 This post-production layer adds animated graphic overlays, styled captions, and an Epidemic soundtrack to an edited video. It uses Python's standard library and FFmpeg/libass, with no additional Python packages required.
 
 Prerequisites: Python 3.11 or newer (tested with 3.11), FFmpeg and ffprobe on PATH or supplied through `--ffmpeg`/`--ffprobe`, and an Epidemic account MCP API key with music/SFX download access. The FFmpeg build needs libass, libx264, AAC encoding, and the standard audio mixing filters including `sidechaincompress` and `alimiter`. NVIDIA NVENC is optional; CPU rendering uses libx264. The tool reads its configuration relative to the repository and has no dependency on a particular drive letter.

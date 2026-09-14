@@ -10,6 +10,7 @@ import re
 import random
 from pathlib import Path
 from dotenv import load_dotenv
+from videoai_policy import policy_prompt
 
 # On Windows, stdout defaults to the locale codepage (cp1252) whenever output
 # is piped or redirected. Generated scripts contain curly quotes and ellipses,
@@ -72,29 +73,7 @@ VIRAL_INSPIRATIONAL_QUOTES = [
     }
 ]
 
-INSPIRATIONAL_LLM_PROMPT = """
-You are a master viral documentary scriptwriter specializing in 2026 high-retention 1M+ view Shorts & Reels.
-Your theme is strictly SELF-DISCIPLINE & DAILY HARDSHIP (values discipline over motivation, no philosophy or stoicism labels). Given a topic, generate a hyper-realistic, punchy SCRIPT MONOLOGUE using 2026 script formatting rules:
-
-Tone & Content Rules:
-1. Theme: Self-Discipline & Daily Hardship (focus on painful daily execution, silent grinds, physical/mental friction, and relentless consistency).
-2. NO toxic positivity, NO cliches (e.g. "believe in yourself", "reach for the stars", "follow your dreams").
-3. DO NOT use generic AI words like "tapestry", "unwavering", "delve", "beacon", or "stoic".
-
-Script Formatting Rules:
-1. Spell out all numbers completely as words (e.g. "two thousand twenty-six" instead of "2026").
-2. Use ellipses (...) to force reflective pauses, and em-dashes (—) for sudden dramatic rhythm shifts.
-3. Strategically insert audio direction tags like [pause 1.5s] or [whisper] before serious, impactful sentences.
-4. Capitalize single key impact verbs or adjectives for heavy vocal stress (e.g. "DOMINATES", "OUTWORK", "EXECUTE").
-5. Include exact Epidemic Sound search parameters matching an intense, heavy, dark motivational mood.
-
-Respond ONLY with valid JSON in the following format:
-{
-    "title": "Daily Hardship: The Price of Execution",
-    "narration_script": "Motivation is a FLEETING mood. [pause 1.5s] When alarm rings at five in the morning... nobody is coming to push you. You gotta EXECUTE when your mind screams to stop. [whisper] Comfort is a slow trap. Suffer the raw friction of daily work... or drown in the quiet misery of regret.",
-    "epidemic_search_term": "intense dark action trailer motivation"
-}
-"""
+INSPIRATIONAL_LLM_PROMPT = policy_prompt(content_type="documentary")
 
 def spell_out_numbers(text: str) -> str:
     """Spells out numbers as words and normalizes dramatic punctuation for AI script pacing compliance."""
@@ -184,53 +163,9 @@ def get_all_target_videos() -> list:
     return videos
 
 def generate_inspirational_quote_script(topic: str, quote_index: int = 0) -> dict:
-    """Connects to LLM for 2026 formatted electrifying inspirational quote."""
-    print(f'[*] Connecting to LLM for 2026 Formatted Quote on: "{topic}"...')
-    
-    if OPENAI_API_KEY:
-        try:
-            url = 'https://api.openai.com/v1/chat/completions'
-            headers = {
-                'Authorization': f'Bearer {OPENAI_API_KEY}',
-                'Content-Type': 'application/json'
-            }
-            payload = {
-                'model': 'gpt-4o',
-                'messages': [
-                    {'role': 'system', 'content': INSPIRATIONAL_LLM_PROMPT},
-                    {'role': 'user', 'content': f'Write a 2026 formatted electrifying inspirational quote script for: {topic}'}
-                ],
-                'response_format': {'type': 'json_object'},
-                'temperature': 0.8
-            }
-            res = requests.post(url, headers=headers, json=payload, timeout=30)
-            res.raise_for_status()
-            content = res.json()['choices'][0]['message']['content']
-            data = json.loads(content)
-            print('[+] 2026 Formatted Quote generated via OpenAI GPT-4o!')
-            return data
-        except Exception as e:
-            print(f'[!] OpenAI API failed: {e}. Trying Gemini API fallback...')
-
-    if GOOGLE_API_KEY:
-        try:
-            url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GOOGLE_API_KEY}'
-            headers = {'Content-Type': 'application/json'}
-            prompt_text = f"{INSPIRATIONAL_LLM_PROMPT}\n\nUser Request: Write a 2026 formatted electrifying inspirational quote script for: {topic}"
-            payload = {
-                'contents': [{'parts': [{'text': prompt_text}]}],
-                'generationConfig': {'responseMimeType': 'application/json'}
-            }
-            res = requests.post(url, headers=headers, json=payload, timeout=30)
-            res.raise_for_status()
-            content = res.json()['candidates'][0]['content']['parts'][0]['text']
-            data = json.loads(content)
-            print('[+] 2026 Formatted Quote generated via Gemini 2.5 Flash!')
-            return data
-        except Exception as e:
-            print(f'[!] Gemini API failed: {e}')
-
-    return VIRAL_INSPIRATIONAL_QUOTES[quote_index % len(VIRAL_INSPIRATIONAL_QUOTES)]
+    """Use the shared provider policy and validation instead of unrelated quote fallbacks."""
+    from script_generator import generate_video_script
+    return generate_video_script(topic, target_duration_seconds=30, content_type="documentary")
 
 def generate_silence_mp3(duration_seconds: float, output_path: str):
     """Generates a silent MP3 file of specified duration matching TTS audio format (24kHz mono)."""
@@ -408,161 +343,11 @@ def _openai_tts_segment(text: str, out_path: str) -> bool:
         return False
 
 def generate_voiceover_audio(script_text: str, filename_prefix: str) -> tuple[str, str]:
-    """Generates voiceover using 2026 script formatting rules, dynamic micro-pauses, and baritone tuning."""
-    print('[*] Generating 2026 Paced Baritone Voiceover with Micro-Pause Engine...')
-    audio_mp3 = os.path.abspath(os.path.join(OUTPUT_DIR, f'temp_voice_2026_{filename_prefix}.mp3'))
-    
-    clean_text = spell_out_numbers(script_text)
-    clean_text = re.sub(r"\[whisper\]", "", clean_text)
-    clean_text = re.sub(r"\[breath\]", "...", clean_text)
-    
-    word_pause_map = {
-        'one point five': '1.5',
-        'one point two': '1.2',
-        'one point zero': '1.0',
-        'zero point five': '0.5',
-        'one': '1.0',
-        'two': '2.0',
-        'three': '3.0'
-    }
-    def normalize_pause_tag(match):
-        val_str = match.group(1).lower().strip()
-        val_str = re.sub(r'seconds?', '', val_str).strip()
-        if val_str in word_pause_map:
-            return f"[pause {word_pause_map[val_str]}s]"
-        try:
-            float(val_str)
-            return f"[pause {val_str}s]"
-        except ValueError:
-            return "[pause 1.0s]"
-
-    clean_text = re.sub(r"\[pause\s+([^\]]+)\]", normalize_pause_tag, clean_text)
-    
-    pattern = r'\[pause\s*([\d\.]+)\s*s?\]'
-    tokens = re.split(pattern, clean_text)
-    
-    segments = []
-    i = 0
-    while i < len(tokens):
-        text_part = tokens[i].strip()
-        pause_dur = None
-        if i + 1 < len(tokens):
-            try:
-                pause_dur = float(tokens[i+1])
-            except ValueError:
-                pause_dur = None
-        segments.append((text_part, pause_dur))
-        i += 2
-
-    import edge_tts
-
-    audio_parts = []
-    part_idx = 0
-    used_engine = None
-
-    for text_part, pause_dur in segments:
-        if text_part:
-            # Synthesize the whole passage in as few calls as possible, split
-            # only on sentence boundaries. Splitting more finely than this is
-            # what made the delivery sound disjointed.
-            for chunk_idx, chunk in enumerate(_split_for_tts(text_part)):
-                part_path = os.path.abspath(os.path.join(
-                    OUTPUT_DIR, f'temp_part_{filename_prefix}_{part_idx}_{chunk_idx}.mp3'))
-
-                # Engine preference, most to least natural. Capitalisation is
-                # preserved for both API engines so the emphasis the script
-                # author wrote actually survives into the delivery.
-                if _elevenlabs_tts_segment(chunk, part_path):
-                    audio_parts.append(part_path)
-                    used_engine = used_engine or f"ElevenLabs ({ELEVENLABS_MODEL})"
-                    continue
-
-                if _openai_tts_segment(chunk, part_path):
-                    audio_parts.append(part_path)
-                    used_engine = used_engine or f"OpenAI {OPENAI_TTS_MODEL} ({OPENAI_TTS_VOICE})"
-                    continue
-
-                # Fallback: Edge TTS. No pitch shift - post-hoc pitch bending
-                # introduces formant artefacts and is a giveaway on its own.
-                tts_ready_text = sanitize_text_for_human_tts(chunk)
-
-                async def run_edge_tts(txt, path):
-                    communicate = edge_tts.Communicate(
-                        txt,
-                        MORGAN_FREEMAN_VOICE,
-                        rate=MORGAN_FREEMAN_RATE,
-                    )
-                    await communicate.save(path)
-
-                try:
-                    asyncio.run(run_edge_tts(tts_ready_text, part_path))
-                    if os.path.exists(part_path) and os.path.getsize(part_path) > 100:
-                        audio_parts.append(part_path)
-                        used_engine = used_engine or f"Edge TTS ({MORGAN_FREEMAN_VOICE})"
-                except Exception as e:
-                    print(f"[!] Error generating TTS segment '{chunk[:20]}...': {e}")
-
-        if pause_dur and pause_dur > 0.05:
-            silence_path = os.path.abspath(os.path.join(OUTPUT_DIR, f'temp_silence_{filename_prefix}_{part_idx}.mp3'))
-            try:
-                generate_silence_mp3(pause_dur, silence_path)
-                if os.path.exists(silence_path):
-                    audio_parts.append(silence_path)
-                    print(f"    [+] Inserted dramatic pause: {pause_dur}s")
-            except Exception as e:
-                print(f"[!] Error generating silence: {e}")
-                
-        part_idx += 1
-        
-    if not audio_parts:
-        return None, "None"
-        
-    if len(audio_parts) == 1:
-        if os.path.exists(audio_mp3):
-            os.remove(audio_mp3)
-        os.rename(audio_parts[0], audio_mp3)
-    else:
-        list_path = os.path.abspath(os.path.join(OUTPUT_DIR, f'concat_list_{filename_prefix}.txt'))
-        with open(list_path, 'w', encoding='utf-8') as f:
-            for p in audio_parts:
-                escaped_p = p.replace('\\', '/')
-                f.write(f"file '{escaped_p}'\n")
-                
-        concat_cmd = [
-            FFMPEG_PATH, '-y',
-            '-f', 'concat',
-            '-safe', '0',
-            '-i', list_path,
-            '-c:a', 'libmp3lame',
-            '-ar', '24000',
-            '-ac', '1',
-            '-b:a', '192k',
-            audio_mp3
-        ]
-        try:
-            subprocess.run(concat_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, check=True)
-        except Exception as err:
-            print(f"[!] FFmpeg concat error: {err}")
-            
-        for p in audio_parts:
-            if os.path.exists(p):
-                try:
-                    os.remove(p)
-                except Exception:
-                    pass
-        if os.path.exists(list_path):
-            try:
-                os.remove(list_path)
-            except Exception:
-                pass
-
-    if os.path.exists(audio_mp3) and os.path.getsize(audio_mp3) > 1000:
-        engine = used_engine or "unknown engine"
-        print(f'[+] 2026 Paced Voiceover generated via {engine} '
-              f'({os.path.getsize(audio_mp3)} bytes)')
-        return audio_mp3, f"Documentary Baritone ({engine})"
-        
-    return None, "None"
+    """Preserve the approved Cedar delivery; no silent switch to another voice."""
+    from voice_synthesizer import synthesize_narration
+    path = os.path.abspath(os.path.join(OUTPUT_DIR, f"temp_voice_{filename_prefix}.mp3"))
+    audio, _, _ = synthesize_narration(script_text, output_filename=path, provider="openai", voice="cedar", word_timestamps=False)
+    return audio, "OpenAI Cedar / approved conversational preset"
 
 def generate_ai_whisper_subtitles(audio_path: str, output_ass_path: str):
     """Uses OpenAI Faster-Whisper AI model to transcribe and align subtitles with The Hormozi Effect style."""

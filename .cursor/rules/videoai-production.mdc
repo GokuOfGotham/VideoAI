@@ -1,0 +1,5 @@
+---
+description: Shared VideoAI production defaults
+alwaysApply: true
+---
+Read AGENTS.md, PRODUCTION_RULES.md and videoai_policy/policy.json before VideoAI work. Use the shared policy for every model. Run `python policy_tool.py check <plan.json>` on the concrete production_review and review actual media before delivery. Explicit user choices take precedence; record them without inventing authorization. Plan checks do not guarantee quality or views. Civic, election and policy explainers use politics mode (`python policy_tool.py prompt --mode politics`; Politics mode section of PRODUCTION_RULES.md).

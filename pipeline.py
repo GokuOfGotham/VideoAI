@@ -1,6 +1,6 @@
 """Automated MoneyPrinterTurbo-style Video Generation Pipeline for VideoAI.
 
-Unifies script generation (LLM), local Voicebox GPU voice synthesis (James Earl Jones profile),
+Unifies script generation (LLM), approved Cedar narration,
 ASS animated subtitles, military/stock footage fetching, and FFmpeg 9:16 vertical rendering.
 """
 
@@ -16,6 +16,7 @@ from typing import Dict, List, Optional
 from dotenv import load_dotenv
 
 from script_generator import generate_video_script
+from videoai_policy import validate_script
 from voice_synthesizer import synthesize_narration, get_audio_duration
 from subtitle_engine import create_ass_subtitles
 from material_fetcher import fetch_material_for_scene
@@ -33,8 +34,8 @@ os.makedirs(ASSETS_DIR, exist_ok=True)
 def build_automated_video(
     topic: str,
     target_duration: int = 30,
-    voice_provider: str = "voicebox",
-    voice_name: str = "James Earl Jones",
+    voice_provider: str = "openai",
+    voice_name: str = "cedar",
     llm_provider: str = "openai",
     font_name: str = "Impact",
     bgm_path: Optional[str] = None
@@ -55,8 +56,10 @@ def build_automated_video(
     print(f"  Narration: {script.get('narration_script')[:80]}...")
     print(f"  Scenes Count: {len(script.get('scenes', []))}")
 
+    validate_script(script, duration=target_duration)
+
     # Step 2: Local Voicebox GPU Voice Synthesis (James Earl Jones)
-    print(f"\n[Step 2/5] Synthesizing Voiceover via Local Voicebox ({voice_name}) & Timing Alignment...")
+    print(f"\n[Step 2/5] Synthesizing narration ({voice_name}) & Timing Alignment...")
     audio_path, duration, word_timestamps = synthesize_narration(
         script["narration_script"],
         output_filename=f"narration_{timestamp_str}.mp3",
@@ -65,6 +68,8 @@ def build_automated_video(
     )
     print(f"  Audio File: {audio_path} ({duration:.2f}s)")
     print(f"  Words Timed: {len(word_timestamps)}")
+
+    validate_script(script, duration=duration)
 
     # Step 3: Create ASS Animated Subtitles (Large Centered TikTok Typography)
     print("\n[Step 3/5] Building ASS TikTok-Style Large Centered Subtitles...")
@@ -176,8 +181,8 @@ def main():
     parser = argparse.ArgumentParser(description="Automated VideoAI Short-Form Video Generator")
     parser.add_argument("--topic", type=str, default="Ukraine vs Russia Tactical Shift and Drone Warfare", help="Video topic or prompt")
     parser.add_argument("--duration", type=int, default=25, help="Target video duration in seconds")
-    parser.add_argument("--voice", type=str, default="voicebox", choices=["voicebox", "edge", "openai", "elevenlabs"], help="TTS voice provider")
-    parser.add_argument("--voice-name", type=str, default="James Earl Jones", help="Voice profile name for Voicebox")
+    parser.add_argument("--voice", type=str, default="openai", choices=["voicebox", "edge", "openai", "elevenlabs"], help="TTS voice provider")
+    parser.add_argument("--voice-name", type=str, default="cedar", help="Voice profile name for Voicebox")
     parser.add_argument("--llm", type=str, default="openai", choices=["openai", "gemini", "deepseek"], help="LLM provider")
 
     args = parser.parse_args()

@@ -1,5 +1,8 @@
 # VideoAI
 
+**Production defaults for every AI:** Start with [PRODUCTION_RULES.md](PRODUCTION_RULES.md).
+The OpenAI, Gemini, DeepSeek and AW360 script paths load one shared policy; real-input graphics renders require a production review. Gameplay can retain original audio without added music. Civic and election explainers use politics mode (`python policy_tool.py prompt --mode politics`; see PRODUCTION_RULES.md). Export the policy to another assistant with `python policy_tool.py prompt`, and check a plan with `python policy_tool.py check production.json`. These checks do not guarantee audience performance or replace final-media review.
+
 A Python toolkit for automated short-form video production. It selects source
 footage, scores it with licensed music, strips unwanted subjects out of the
 frame, and renders finished vertical cuts with FFmpeg.

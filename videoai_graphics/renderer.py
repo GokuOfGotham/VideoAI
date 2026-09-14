@@ -1,7 +1,7 @@
 """FFmpeg rendering with isolated ASS resources and atomic output publication.
 
-Every render obtains music and sound effects through the Epidemic adapter.
-Source audio tracks remain separate and are mixed with those required assets.
+Narrated renders obtain supporting music and effects through the Epidemic adapter.
+Natural-gameplay mode preserves source audio without fetching added audio.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import tempfile
 from typing import Any
+from videoai_policy import validate_plan
 
 
 class RenderError(RuntimeError):
@@ -287,9 +288,18 @@ def _render(compiled: dict[str, Any], target: Path, input_args: list[str], *,
     try:
         with tempfile.TemporaryDirectory(prefix="videoai_graphics_") as folder:
             workspace = Path(folder)
-            plan = prepare_audio(config, float(compiled["duration"]), workspace, ffprobe=probe_executable)
-            audio_inputs, audio_graph, output_tracks = _audio_mix(plan, float(compiled["duration"]), expected_media["audio_count"])
-            audio_manifest = _safe_audio_manifest(plan)
+            natural = config.get("production_review", {}).get("audio_mode") == "natural_game"
+            if natural:
+                output_tracks = expected_media["audio_count"]
+                if not output_tracks:
+                    raise RenderError("Natural gameplay audio requires a source audio track.")
+                audio_inputs = []
+                audio_graph = [f"[0:a:{i}]aresample=48000,aformat=channel_layouts=stereo,alimiter=limit=0.95:level=false[aout{i}]" for i in range(output_tracks)]
+                audio_manifest = {"provider": "source", "mode": "natural_game", "added_music": False, "added_narration": False}
+            else:
+                plan = prepare_audio(config, float(compiled["duration"]), workspace, ffprobe=probe_executable)
+                audio_inputs, audio_graph, output_tracks = _audio_mix(plan, float(compiled["duration"]), expected_media["audio_count"])
+                audio_manifest = _safe_audio_manifest(plan)
             (workspace / "graphics.ass").write_text(compiled["ass"], encoding="utf-8-sig")
             has_fonts = _copy_fonts(fonts_dir, workspace)
             filter_value = "ass=filename=graphics.ass"
@@ -305,7 +315,7 @@ def _render(compiled: dict[str, Any], target: Path, input_args: list[str], *,
                 for index in range(expected_media["audio_count"]):
                     base += [f"-map_metadata:s:a:{index}", f"0:s:a:{index}"]
             provenance = json.dumps({"videoai_audio": audio_manifest}, ensure_ascii=True, separators=(",", ":"))
-            base += ["-metadata", f"comment={provenance}", "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+            base += ["-metadata", f"comment={provenance}", "-c:a", "aac", "-b:a", "320k", "-ar", "48000",
                      "-pix_fmt", "yuv420p", "-t", f"{float(compiled['duration']):.6f}"]
             if target.suffix.lower() in {".mp4", ".mov"}:
                 base += ["-movflags", "+faststart"]
@@ -335,7 +345,7 @@ def _render(compiled: dict[str, Any], target: Path, input_args: list[str], *,
             if rendered["audio_count"] != output_tracks:
                 raise RenderError("Rendered video does not preserve the expected number of audio streams.")
             if rendered.get("audio_manifest") != audio_manifest:
-                raise RenderError("Rendered video does not contain the required Epidemic asset provenance.")
+                raise RenderError("Rendered video does not contain the expected audio provenance.")
             try:
                 _publish(temporary, target, overwrite)
             except OSError as exc:
@@ -360,13 +370,14 @@ def render_video(config: dict[str, Any], input_path: str | Path, output_path: st
     media = probe_video(source, ffprobe=ffprobe)
     if media["width"] % 2 or media["height"] % 2:
         raise RenderError("H.264 output requires even source dimensions. Resize the source first.")
+    policy_check = validate_plan(config, duration=media["duration"])
     compiled = compile_graphics(config, media["width"], media["height"], media["duration"])
     result = _render(compiled, target, ["-noautorotate", "-i", str(source)],
                      config=config, source_metadata=True, encoder=encoder, fonts_dir=fonts_dir,
                      overwrite=overwrite, ffmpeg=ffmpeg, ffprobe=ffprobe,
                      expected_media=media, timeout=timeout)
-    return {**result, "input": str(source), "width": media["width"], "height": media["height"],
-            "audio": ("Each source track mixed separately with Epidemic music and sound effects (stereo AAC)."
+    return {**result, "production_policy_check": policy_check, "input": str(source), "width": media["width"], "height": media["height"],
+            "audio": ("Original game audio; no added narration, music or SFX." if config["production_review"]["audio_mode"] == "natural_game" else "Each source track mixed separately with Epidemic music and sound effects (stereo AAC)."
                       if media["audio_count"] else "Epidemic music and sound effects (stereo AAC).")}
 
 

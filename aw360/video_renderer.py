@@ -12,6 +12,7 @@ import subprocess
 from dotenv import load_dotenv
 
 from . import paths
+from videoai_policy import validate_script
 
 load_dotenv()
 
@@ -29,6 +30,7 @@ class VideoRenderer:
         Renders complete 1080x1920 60fps vertical video and generates metadata package.
         Returns (rendered_mp4_path, metadata_json_path).
         """
+        validate_script(script_data)
         metadata = script_data.get("metadata", {})
         title = metadata.get("video_title", "AW360_Animal_Fact")
         clean_title = re.sub(r'[^a-zA-Z0-9_]', '_', title)[:25]

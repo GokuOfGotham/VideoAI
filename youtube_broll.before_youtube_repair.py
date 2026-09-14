@@ -22,8 +22,6 @@ rights on anything published remains your responsibility.
 import argparse
 import hashlib
 import json
-import shutil
-import json
 import os
 import re
 import sys
@@ -94,24 +92,6 @@ class YouTubeBRollError(RuntimeError):
     """Raised when the pipeline cannot run at all (missing yt-dlp, etc.)."""
 
 
-def _youtube_access_options() -> Dict:
-    """Read explicit local auth preferences; never export browser cookies."""
-    options = {}
-    node = shutil.which("node")
-    if node:
-        options["js_runtimes"] = {"node": {"path": node}}
-    config_path = PROJECT_ROOT / "youtube_access.json"
-    if config_path.exists():
-        settings = json.loads(config_path.read_text(encoding="utf-8"))
-        browser = settings.get("browser")
-        profile = settings.get("profile")
-        if browser and profile:
-            if browser != "firefox" or not Path(profile).is_dir():
-                raise YouTubeBRollError("The configured dedicated Firefox profile is unavailable.")
-            options["cookiesfrombrowser"] = (browser, profile, None, None)
-    return options
-
-
 def _import_yt_dlp():
     try:
         import yt_dlp
@@ -148,7 +128,7 @@ def search_candidates(query: str, limit: int = 20, cc_only: bool = True) -> List
     }
 
     try:
-        with yt_dlp.YoutubeDL({**_youtube_access_options(), **opts}) as ydl:
+        with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(target, download=False) or {}
     except Exception as exc:
         print(f"[YouTubeBRoll] Search failed for '{query}' ({exc}).")
@@ -171,7 +151,7 @@ def _fetch_details(video_id: str) -> Optional[Dict]:
     yt_dlp = _import_yt_dlp()
     opts = {"quiet": True, "no_warnings": True, "skip_download": True, "noplaylist": True}
     try:
-        with yt_dlp.YoutubeDL({**_youtube_access_options(), **opts}) as ydl:
+        with yt_dlp.YoutubeDL(opts) as ydl:
             return ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
     except Exception:
         return None
@@ -282,7 +262,7 @@ def _download_probe(video_id: str, start: float, length: float, dest: Path, min_
     }
 
     try:
-        with yt_dlp.YoutubeDL({**_youtube_access_options(), **opts}) as ydl:
+        with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
     except Exception as exc:
         print(f"[YouTubeBRoll] Segment download failed for {video_id} ({exc}).")
