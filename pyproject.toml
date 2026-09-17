@@ -34,7 +34,7 @@ build-backend = "setuptools.build_meta"
 # Flat layout: the root holds standalone scripts run as `python <script>.py`,
 # and aw360 is the only importable package. Naming it explicitly stops
 # setuptools auto-discovery from failing on the flat layout.
-packages = ["aw360", "videoai_policy"]
+packages = ["aw360", "videoai_policy", "videoai_graphics", "videoai_director"]
 
 [tool.setuptools.package-data]
 videoai_policy = ["policy.json"]

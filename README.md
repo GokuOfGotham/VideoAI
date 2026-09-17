@@ -23,6 +23,12 @@ frame, and renders finished vertical cuts with FFmpeg.
   body parts so clips can be filtered down to hardware-only footage.
 - **Voiceover** — narration through a local Voicebox TTS server, Edge TTS, or
   OpenAI voices.
+- **Director tools** — `director_tool.py` builds a per-source scene log (cuts,
+  thumbnails, who is on screen, what is said and by whom, read from the
+  source's own subtitles), ranks the footage's best lines as candidate
+  excerpts, validates a plan's story spine (hook, claim, evidence, turn,
+  re-hooks, open loops, payoff, button) and writes a director's review of the
+  cut against the scene log before anything renders.
 - **Licence checking** — `check_licensing.py` verifies the state of your
   Epidemic Sound account before you publish.
 

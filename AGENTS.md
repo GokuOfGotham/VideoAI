@@ -21,3 +21,7 @@ For future videos, use `APPROVED_VOICE_PRESET.json`: OpenAI Cedar with gpt-4o-mi
 Preserve natural phrasing. Do not slow down, pitch-shift, or stretch finished speech to fill the edit. Prefer rewriting or regenerating a line; add brief pauses only at punctuation, never arbitrarily inside a phrase. Keep narration clear over music and retime captions to the final recording. Use the approved reference files for comparison.
 
 Some legacy scripts hardcode Onyx, older models, or other providers. Override those legacy defaults with this preset when producing new videos; do not assume their defaults match the user's preference.
+
+## Story first — the director tools
+
+Before writing narration for a long-form video: build a scene log for each source (`python director_tool.py index …`), rank its lines (`director_tool.py excerpts …`), and plan around them. Declare `story_spine` in the plan (question, thesis, timed beats, typed chapters); `policy_tool.py check` validates it. Run `director_tool.py review` on the plan and timeline before rendering and act on the `fix` findings. See the Story spine section of PRODUCTION_RULES.md; reference build `create_wolverine_vs_omega_red.py`.
