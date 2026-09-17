@@ -19,6 +19,7 @@ caller with the ASS header and tag from `ass_header` / `caption_tag`.
                 ["Draupner platform, 1995", "First instrument record"], "Statoil laser gauge"),
                 source=Source("BBC", "Horizon", "March 3, 2026", "1920x1080"), sound=False)
     png, (x, y, w, h) = render_plate(theme, shot, Path("plate.png"))
+    # 4K sources: render_plate(theme, shot, path, scale=2) draws the same layout at 3840x2160.
 
 Run `python -m videoai_graphics.broadcast --demo out_dir` to render sample
 plates for the four built-in subjects.
@@ -54,7 +55,13 @@ MAIN_LAYOUT = dict(W=1920, H=1080, px=56, py=96, pw=1408, ph=792, sx=1496, sy=96
 SHORT_LAYOUT = dict(W=1080, H=1920, px=0, py=380, pw=1080, ph=608, tab_y=1004, bar_y=1052, bar_h=92, card_y=1184, card_h=316, strap_y=1560, cap_x=28, cap_y=1098)
 
 
+_FONT_CACHE = {}
+
+
 def font(kind: str, size: float) -> ImageFont.FreeTypeFont:
+    key = (kind, round(size))
+    if key in _FONT_CACHE:
+        return _FONT_CACHE[key]
     p = FONT_DIR / FONTS[kind]
     if not p.exists():
         p = FONT_DIR / FALLBACKS[kind]
@@ -64,7 +71,35 @@ def font(kind: str, size: float) -> ImageFont.FreeTypeFont:
             f.set_variation_by_name("Bold Condensed")
         except Exception:
             pass
+    f.house_kind, f.house_size = kind, size  # so a scaled canvas can re-load it larger
+    _FONT_CACHE[key] = f
     return f
+
+
+class _Scaled:
+    """ImageDraw proxy for a canvas rendered at `s` times the layout size.
+
+    Every component is authored in the 1920x1080 / 1080x1920 layout units; this
+    multiplies coordinates, stroke widths and font sizes on the way to the pixels,
+    so a 4K plate is drawn with real 4K type instead of an upscaled 1080p image.
+    """
+
+    def __init__(self, draw, s):
+        self.d, self.s = draw, s
+
+    def _font(self, f):
+        return font(f.house_kind, f.house_size * self.s) if f is not None and hasattr(f, "house_kind") else f
+
+    def rectangle(self, xy, **kw):
+        if "width" in kw:
+            kw = dict(kw, width=max(1, round(kw["width"] * self.s)))
+        self.d.rectangle(tuple(v * self.s for v in xy), **kw)
+
+    def text(self, xy, t, font=None, fill=None):
+        self.d.text((xy[0] * self.s, xy[1] * self.s), t, font=self._font(font), fill=fill)
+
+    def textlength(self, t, font=None):
+        return self.d.textlength(t, font=self._font(font)) / self.s
 
 
 @dataclass
@@ -178,11 +213,18 @@ def default_chyron(card: Card) -> str:
 
 
 # --- Plates ----------------------------------------------------------------------------
-def render_plate(theme: Theme, shot: Shot, out: Path) -> Tuple[Path, Tuple[int, int, int, int]]:
-    """Draw the background plate for one shot. Returns (png path, footage rectangle)."""
+def render_plate(theme: Theme, shot: Shot, out: Path, scale: int = 1) -> Tuple[Path, Tuple[int, int, int, int]]:
+    """Draw the background plate for one shot. Returns (png path, footage rectangle).
+
+    `scale` renders the same layout at a multiple of its size (2 = 3840x2160 main /
+    2160x3840 short) with type and rules redrawn at that size; the returned rectangle
+    is in output pixels. Use it when the sources are native 4K so nothing is upscaled.
+    """
     c = theme.c; vert = shot.kind == "short"; L = SHORT_LAYOUT if vert else MAIN_LAYOUT
     W, H = L["W"], L["H"]; px, py, pw, ph = L["px"], L["py"], L["pw"], L["ph"]
-    im = Image.new("RGB", (W, H), c["ground"]); d = ImageDraw.Draw(im)
+    im = Image.new("RGB", (W * scale, H * scale), c["ground"]); d = ImageDraw.Draw(im)
+    if scale != 1:
+        d = _Scaled(d, scale)
     d.rectangle((0, H * 0.72, W, H), fill=c["ground2"]); d.rectangle((0, 0, W, 4), fill=c["accent_hi"])
     card = shot.card; chapter = theme.chapters[shot.section] if shot.section < len(theme.chapters) else ""
     src = shot.source
@@ -280,7 +322,7 @@ def render_plate(theme: Theme, shot: Shot, out: Path) -> Tuple[Path, Tuple[int, 
                 text(d, f"{n + 1:02}", px + pw * .075, start + n * rowh + 14, "cond", 26 if vert else 30, pw * .08, c["accent_hi"])
                 text(d, b, px + pw * .15, start + n * rowh + 12, "cond", 30 if vert else 40, pw * .77, INK, upper=True)
     out = Path(out); out.parent.mkdir(parents=True, exist_ok=True); im.save(out)
-    return out, (px, py, pw, ph)
+    return out, (px * scale, py * scale, pw * scale, ph * scale)
 
 
 # --- Captions and overlays -----------------------------------------------------------------
@@ -322,7 +364,8 @@ def cover(theme: Theme, frame: Image.Image, big: str, line2: str, headline: str,
         tab(d, 826, 36, theme.channel, "cond", 24, WHITE, c["navy"], h=42)
         text(d, big, 826, 108, "num", 150, 430, WHITE, upper=True, line=1.0)
         d.rectangle((826, 270, 1244, 336), fill=WHITE); text(d, line2, 842, 282, "cond", fit_size(d, line2.upper(), "cond", 44, 386), 400, INK, upper=True)
-        text(d, headline, 826, 362, "cond", 78, 430, WHITE, upper=True, line=0.98)
+        hs = min(fit_size(d, ln.upper(), "cond", 78, 430, floor=44) for ln in headline.splitlines())
+        text(d, headline, 826, 362, "cond", hs, 430, WHITE, upper=True, line=0.98)
         tab(d, 826, 560, tags, "cond", 22, c["accent"], h=40)
         text(d, note, 826, 620, "bold", 18, 440, c["mute"], upper=True)
     else:
@@ -332,7 +375,8 @@ def cover(theme: Theme, frame: Image.Image, big: str, line2: str, headline: str,
         tab(d, 56, 80, theme.channel, "cond", 30, WHITE, c["navy"], h=52)
         text(d, big, 56, 150, "num", 190, 960, WHITE, upper=True, line=1.0)
         d.rectangle((0, 1350, 1080, 1440), fill=WHITE); text(d, line2, 56, 1362, "cond", fit_size(d, line2.upper(), "cond", 60, 960), 960, INK, upper=True)
-        text(d, headline, 56, 1470, "cond", 84, 960, WHITE, upper=True)
+        hs = min(fit_size(d, ln.upper(), "cond", 84, 960, floor=48) for ln in headline.splitlines())
+        text(d, headline, 56, 1470, "cond", hs, 960, WHITE, upper=True)
         tab(d, 56, 1590, tags, "cond", 26, c["accent"], h=48)
     out = Path(out); im.save(out, quality=92); return out
 

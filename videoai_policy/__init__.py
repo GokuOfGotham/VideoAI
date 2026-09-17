@@ -70,7 +70,7 @@ def validate_plan(data, *, duration=None):
     if not isinstance(overrides, dict):
         raise ProductionPolicyError('overrides must be an object.')
     for key, value in overrides.items():
-        if key not in {'hook','payoff','pacing','audio','standalone'} or not isinstance(value, dict) or not all(_text(value.get(f)) for f in ['reason','user_request']):
+        if key not in {'hook','payoff','pacing','audio','standalone','story'} or not isinstance(value, dict) or not all(_text(value.get(f)) for f in ['reason','user_request']):
             raise ProductionPolicyError(f'Invalid override {key!r}; record the real user request and the reason.')
     def require(condition, message, exception=None):
         if not condition and exception not in overrides:
@@ -102,9 +102,28 @@ def validate_plan(data, *, duration=None):
         raise ProductionPolicyError(f'Unknown production_review.mode {mode!r}; known modes: {sorted(MODES)}')
     if mode == 'politics':
         _check_politics(data, review)
+    story_result = None
+    if data.get('story_spine') is not None:
+        story_result = _check_story(data, duration)
+    elif review.get('format') == 'long' and 'story' not in overrides:
+        # Not fatal yet: recipes written before the spine existed still check; new long-form plans should declare one.
+        story_result = {'errors': [], 'warnings': ['no story_spine declared; long-form plans should declare one (python director_tool.py spine-template)']}
     return {'policy_version': p['version'], 'status': 'plan_checked', 'mode': mode,
             'limitations': 'Checks declared timings, text and editorial descriptions; does not establish actual footage quality or audience performance.',
-            'overrides': copy.deepcopy(overrides)}
+            'overrides': copy.deepcopy(overrides), 'story': story_result}
+
+
+def _check_story(data, duration):
+    """The story spine is validated by videoai_director.story (pure, offline). Errors fail the plan; warnings are returned."""
+    from videoai_director import story
+    text = data.get('narration_script', data.get('full_voiceover_text', ''))
+    dur = duration if duration is not None else data.get('duration')
+    if dur is None:
+        raise ProductionPolicyError('A plan with a story_spine needs a duration (pass duration= or include it in the plan).')
+    result = story.validate_spine(data['story_spine'], float(dur), text if isinstance(text, str) else None)
+    if result['errors']:
+        raise ProductionPolicyError('Story spine: ' + '; '.join(result['errors']))
+    return result
 
 
 def _check_politics(data, review):
