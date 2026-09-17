@@ -21,3 +21,7 @@ For future videos, use `APPROVED_VOICE_PRESET.json`: OpenAI Cedar with gpt-4o-mi
 Preserve natural phrasing. Do not slow down, pitch-shift, or stretch finished speech to fill the edit. Prefer rewriting or regenerating a line; add brief pauses only at punctuation, never arbitrarily inside a phrase. Keep narration clear over music and retime captions to the final recording. Use the approved reference files for comparison.
 
 Some legacy scripts hardcode Onyx, older models, or other providers. Override those legacy defaults with this preset when producing new videos; do not assume their defaults match the user's preference.
+
+## Editing room tools
+
+For ingest, timeline, captions, audio finishing and colour, use `editroom_tool.py` / `videoai_editroom` ([EDITING_ROOM.md](EDITING_ROOM.md)) instead of ad-hoc FFmpeg. A timeline renders through `edit_tools`, is finished by `graphics_tool.py`, and still needs `policy_tool.py check`; captions come out in the broadcast system; ADR uses the approved Cedar preset and is labelled as re-voiced. Transcript speaker labels are heuristic turns until named from the footage.
