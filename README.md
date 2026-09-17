@@ -54,6 +54,21 @@ python check_licensing.py         # verify Epidemic Sound licensing
 python search_music.py            # search the music catalogue
 ```
 
+### Editing room
+
+`editroom_tool.py` adds the post-production departments beyond audio
+sourcing: transcription with speaker turns, multicam sync, silence/filler
+detection, proxies, a JSON timeline with edit actions and FCPXML/EDL export,
+transcript-driven assembly, B-roll search, house-styled captions, subject
+tracking auto-reframe, dialogue clean-up, music ducking, ADR with the approved
+voice, shot matching and LUTs. See [EDITING_ROOM.md](EDITING_ROOM.md).
+
+```bash
+python editroom_tool.py transcribe raw/interview.mp4 --output work/transcript.json
+python editroom_tool.py assemble raw/interview.mp4 --transcript work/transcript.json --brief "why the launch was scrubbed" --output work/cut.json
+python editroom_tool.py render work/cut.json --output work/clean.mp4 --work work/segments
+```
+
 ### YouTube b-roll
 
 Both video agents — `pipeline.py` and the AW360 director — fall through to
