@@ -42,6 +42,8 @@ SUBJECTS = {
     "science":  dict(accent="#0284C7", accent_hi="#38BDF8", accent2="#F59E0B", ground="#07142A", ground2="#050E1F", panel="#0B1F3F", navy="#0B2A4A", mute="#9CB8D0", edge="#2E4A6B"),
     "gaming":   dict(accent="#5FB824", accent_hi="#A3E635", accent2="#E11D74", ground="#0B1410", ground2="#070D0A", panel="#10241A", navy="#14301F", mute="#A6C3AE", edge="#2F4A38"),
     "sports":   dict(accent="#E8590C", accent_hi="#FF8A3D", accent2="#1B4ED8", ground="#0E0F1A", ground2="#090A12", panel="#1B1D33", navy="#2A1A0F", mute="#C2B8B0", edge="#4A3A32"),
+    # Horror / heavy-weather pieces: near-black grounds with a dried-blood accent. Mirror of theme.ts.
+    "storm":    dict(accent="#A3261E", accent_hi="#D9453B", accent2="#5B6B7A", ground="#07090C", ground2="#030405", panel="#0C1016", navy="#0A0E13", mute="#8A94A6", edge="#2A3340"),
     "default":  dict(accent="#3B6FD6", accent_hi="#5B8DEF", accent2="#D62828", ground="#0B1730", ground2="#08122A", panel="#0E1E44", navy="#0F2452", mute="#9FB0CC", edge="#3A4B6E"),
 }
 FONT_DIR = Path("C:/Windows/Fonts")

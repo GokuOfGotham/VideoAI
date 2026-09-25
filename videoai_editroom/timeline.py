@@ -9,9 +9,27 @@ The timeline is plain JSON so any model can read it before deciding a cut:
      "markers": [{"time": 0.0, "name": "HOOK"}],
      "production_review": {...}}
 
-Clip length on the timeline is (src_out - src_in) / speed. Track clips never
-overlap; ``apply_edit_action`` keeps that invariant and ripples later clips
-when an operation changes a clip's length. ``to_edit_plan`` hands V1 to
+The renderer (VideoAI-Remotion `src/videoai/types.ts`) reads the same JSON, so
+the optional fields below are part of this model even though nothing here
+draws them. They are validated rather than ignored: a malformed one should
+fail at the model, not three hours into a render.
+
+  Picture      fit ("cover" | "none" | "contain"), zoom {from, to},
+               focus [x, y], crop [x, y, w, h], hold
+  Transitions  dip, or one-sided dipIn / dipOut (each overrides dip on its side)
+  Audio        volume, fade_in, fade_out, duck {to, attack, release}
+  Labelling    source {outlet, programme, date}, credit (cinematic corner label)
+  Overlay      trailcam {startedAt, camera, timeScale, battery, illustration, label}
+
+Timeline-level, also renderer-side: treatment {vignette, grain, desaturate,
+contrast, darken}, cards, labels, presentation ("broadcast" | "cinematic"),
+captionStyle ("bar" | "subtle" | "none"), subject, channel.
+
+Clip length on the timeline is (src_out - src_in) / speed. Clips on a *video*
+track never overlap, because one picture is on screen at a time;
+``apply_edit_action`` keeps that invariant and ripples later clips when an
+operation changes a clip's length. Audio tracks may overlap freely — a score
+crossfades cue into cue, and beds, narration and effects sound together. ``to_edit_plan`` hands V1 to
 ``edit_tools.resolve``/``render_segments`` so the render, captions and the
 Epidemic finishing pass are the same ones every recipe uses; the timeline is
 a front end to them, not a second renderer.
@@ -90,14 +108,73 @@ def _normalise(track: dict[str, Any]) -> None:
         clip["src_out"] = round(float(clip["src_out"]), 3)
 
 
+FITS = ("cover", "none", "contain")
+PRESENTATIONS = ("broadcast", "cinematic")
+CAPTION_STYLES = ("bar", "subtle", "none")
+
+
+def _validate_optional(clip: dict[str, Any], track_id: str) -> None:
+    """Check the renderer-side fields. Nothing here draws them; everything here can reject them."""
+    where = f"Clip {clip.get('id')} on {track_id}"
+    if "fit" in clip and clip["fit"] not in FITS:
+        raise EditRoomError(f"{where} has fit {clip['fit']!r}; use one of {', '.join(FITS)}.")
+    zoom = clip.get("zoom")
+    if zoom is not None:
+        if not isinstance(zoom, dict) or not {"from", "to"} <= set(zoom):
+            raise EditRoomError(f"{where} has a zoom without 'from' and 'to'.")
+        if float(zoom["from"]) <= 0 or float(zoom["to"]) <= 0:
+            raise EditRoomError(f"{where} has a non-positive zoom factor.")
+    for key in ("focus",):
+        if key in clip:
+            v = clip[key]
+            if not (isinstance(v, (list, tuple)) and len(v) == 2 and all(0 <= float(x) <= 1 for x in v)):
+                raise EditRoomError(f"{where} needs {key} as two fractions between 0 and 1.")
+    if "crop" in clip:
+        v = clip["crop"]
+        if not (isinstance(v, (list, tuple)) and len(v) == 4 and all(0 <= float(x) <= 1 for x in v)):
+            raise EditRoomError(f"{where} needs crop as four fractions between 0 and 1.")
+        if float(v[0]) + float(v[2]) > 1.0001 or float(v[1]) + float(v[3]) > 1.0001:
+            raise EditRoomError(f"{where} has a crop window running off the image.")
+    for key in ("dip", "dipIn", "dipOut", "fade_in", "fade_out", "hold"):
+        if key in clip and float(clip[key]) < 0:
+            raise EditRoomError(f"{where} has a negative {key}.")
+    if "volume" in clip and float(clip["volume"]) < 0:
+        raise EditRoomError(f"{where} has a negative volume.")
+    duck = clip.get("duck")
+    if duck is not None:
+        if not isinstance(duck, dict) or "to" not in duck:
+            raise EditRoomError(f"{where} has a duck without 'to'.")
+        if not 0 <= float(duck["to"]) <= 1:
+            raise EditRoomError(f"{where} ducks to {duck['to']}; it is a gain multiplier from 0 to 1.")
+    cam = clip.get("trailcam")
+    if cam is not None:
+        if not isinstance(cam, dict) or not cam.get("startedAt"):
+            raise EditRoomError(f"{where} has a trailcam without 'startedAt'.")
+        # The whole point of the field is one clock across a sequence; a bad stamp defeats it.
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}", str(cam["startedAt"])):
+            raise EditRoomError(f"{where} has trailcam.startedAt {cam['startedAt']!r}; "
+                                "use YYYY-MM-DDTHH:MM:SS so every frame shares one clock.")
+    if "credit" in clip and not str(clip["credit"]).strip():
+        raise EditRoomError(f"{where} has an empty credit; omit the field instead.")
+
+
 def validate_timeline(timeline: dict[str, Any]) -> dict[str, Any]:
     """Raises on overlaps or malformed clips; returns a summary."""
     for key in ("fps", "width", "height", "tracks"):
         if key not in timeline:
             raise EditRoomError(f"Timeline is missing '{key}'.")
+    if timeline.get("presentation") not in (None, *PRESENTATIONS):
+        raise EditRoomError(f"Timeline presentation must be one of {', '.join(PRESENTATIONS)}.")
+    if timeline.get("captionStyle") not in (None, *CAPTION_STYLES):
+        raise EditRoomError(f"Timeline captionStyle must be one of {', '.join(CAPTION_STYLES)}.")
     seen: set[str] = set()
     for track in timeline["tracks"]:
         cursor = -1e-9
+        # Only one picture can be on screen at a time, so video tracks may not overlap.
+        # Audio is the opposite: a score crossfades one cue into the next, and beds,
+        # narration and effects are meant to sound at once. The no-overlap rule dates
+        # from a video-only model and must not be applied to sound.
+        exclusive = track.get("kind", "video") == "video"
         for clip in sorted(track["clips"], key=lambda c: float(c["start"])):
             for key in ("id", "src", "src_in", "src_out", "start"):
                 if key not in clip:
@@ -105,9 +182,10 @@ def validate_timeline(timeline: dict[str, Any]) -> dict[str, Any]:
             if clip["id"] in seen:
                 raise EditRoomError(f"Clip id {clip['id']} is used twice.")
             seen.add(clip["id"])
-            if float(clip["start"]) < cursor - 1e-6:
+            _validate_optional(clip, track["id"])
+            if exclusive and float(clip["start"]) < cursor - 1e-6:
                 raise EditRoomError(f"Clip {clip['id']} overlaps the previous clip on {track['id']}.")
-            cursor = clip_end(clip)
+            cursor = max(cursor, clip_end(clip))
     return get_timeline_state(timeline)
 
 
